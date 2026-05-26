@@ -1,0 +1,8 @@
+.tools/
+allure-results/
+allure-report/
+.pytest_cache/
+__pycache__/
+*.pyc
+screenshots/
+.appium-inspector-session.json

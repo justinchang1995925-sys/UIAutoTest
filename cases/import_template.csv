@@ -1,0 +1,5 @@
+用例等级,用例名,功能模块,子模块,操作步骤
+P1,setting_password_idle_lock,设置,密码与安全,"点击 id:com.pudutech.business.function:id/tvSettings
+点击 密码与安全
+点击 电机锁
+设置开关 id:com.pudutech.business.function:id/idle_lock_switch 关闭"
