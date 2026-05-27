@@ -8,7 +8,6 @@ import os
 import re
 import subprocess
 import sys
-import webbrowser
 from pathlib import Path
 
 PRIORITIES = {"P0", "P1", "P2", "P3", "P4"}
@@ -16,6 +15,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
 from allure_cli import augmented_path_env, resolve_allure_command  # noqa: E402
+from appium_server import ensure_appium_server, sync_capabilities_device  # noqa: E402
 from project_paths import resolve_project_root  # noqa: E402
 
 PROJECT_ROOT = resolve_project_root(SCRIPT_DIR)
@@ -131,7 +131,7 @@ def _allure_results_dir_has_data(results_dir: Path) -> bool:
 
 
 def open_allure_html_report(results_dir: Path, report_name: str) -> bool:
-    """Generate static HTML report and open it in the default browser."""
+    """Serve Allure results over HTTP and open the report in the browser."""
     results_dir = results_dir.resolve()
     if not _allure_results_dir_has_data(results_dir):
         print(f"No Allure result files in {results_dir}. Skip opening HTML report.")
@@ -148,9 +148,9 @@ def open_allure_html_report(results_dir: Path, report_name: str) -> bool:
 
     report_dir = (PROJECT_ROOT / "allure-report" / report_name).resolve()
     report_dir.parent.mkdir(parents=True, exist_ok=True)
-
     env = augmented_path_env(PROJECT_ROOT)
-    print(f"Generating Allure HTML report: {report_dir}")
+
+    print(f"Generating static report copy: {report_dir}")
     generate = subprocess.run(
         [
             allure_cmd,
@@ -165,17 +165,22 @@ def open_allure_html_report(results_dir: Path, report_name: str) -> bool:
         check=False,
     )
     if generate.returncode != 0:
-        print("Allure report generation failed.")
-        return False
+        print("Warning: allure generate failed; will still try allure serve.")
 
-    index_html = report_dir / "index.html"
-    if not index_html.exists():
-        print(f"Report index not found: {index_html}")
-        return False
+    print(f"Starting Allure report server for {results_dir}")
+    print("Do not open index.html directly with file:// — use the browser opened by allure serve.")
 
-    print(f"Opening Allure report: {index_html}")
-    if not webbrowser.open(index_html.as_uri()):
-        print("Could not launch a browser automatically. Open the path above manually.")
+    creationflags = 0
+    if sys.platform == "win32":
+        creationflags = subprocess.CREATE_NEW_CONSOLE  # type: ignore[attr-defined]
+
+    subprocess.Popen(
+        [allure_cmd, "serve", str(results_dir)],
+        cwd=str(PROJECT_ROOT),
+        env=env,
+        creationflags=creationflags,
+    )
+    print("Allure report server started. Close its console window to stop the server.")
     return True
 
 
@@ -249,6 +254,11 @@ def main() -> None:
         help="Skip Appium/UiAutomator2 repair after tests (not recommended for Inspector).",
     )
     parser.add_argument(
+        "--skip-appium-start",
+        action="store_true",
+        help="Do not auto-start Appium before running tests.",
+    )
+    parser.add_argument(
         "--open-report",
         action="store_true",
         default=True,
@@ -264,6 +274,10 @@ def main() -> None:
     args = parser.parse_args()
 
     ensure_dependencies(args.skip_install)
+
+    if not args.skip_appium_start:
+        ensure_appium_server(PROJECT_ROOT)
+        sync_capabilities_device(PROJECT_ROOT / "capabilities.json")
 
     test_root = Path(args.test_root)
     allure_root = Path(args.allure_root)

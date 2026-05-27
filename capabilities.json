@@ -1,8 +1,8 @@
 ﻿{
     "platformName": "Android",
     "appium:automationName": "UiAutomator2",
-    "appium:deviceName": "0123456789",
-    "appium:udid": "0123456789",
+    "appium:deviceName": "1800000",
+    "appium:udid": "1800000",
     "appium:noReset": true,
     "appium:newCommandTimeout": 300,
     "appium:disableWindowAnimation": true,

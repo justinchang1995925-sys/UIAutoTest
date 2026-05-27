@@ -84,7 +84,9 @@ python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py --test test_
 
 When the user message matches a run command, run `run_ui_tests.py` immediately. Do not execute test files with plain `python`.
 
-After tests finish, `run_ui_tests.py` **generates and opens** the Allure HTML report by default (`allure-report/<priority|single>/index.html`). Use `--no-open-report` to skip.
+Before tests, `run_ui_tests.py` **auto-starts Appium** if needed and syncs `capabilities.json` device id from `adb devices`.
+
+After tests finish, it runs **`allure serve`** (local HTTP server) to open the report. Do not open `index.html` via `file://` or widgets stay on Loading. Use `--no-open-report` to skip.
 
 Allure CLI is installed automatically into `.tools/allure-<version>/` by `install_ui_dependencies.py` (also sets Windows user `PATH` and `ALLURE_HOME`). Manual install:
 

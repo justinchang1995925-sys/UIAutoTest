@@ -93,8 +93,10 @@ python .cursor/skills/ui-auto-pytest-allure/scripts/import_cases_from_sheet.py c
 
 ### 4. 运行用例
 
+运行前会**自动启动 Appium**（若未运行），并同步 `capabilities.json` 中的设备 ID。
+
 ```powershell
-# 运行单条用例（跑完后自动打开 HTML 报告）
+# 运行单条用例（自动启动 Appium + 跑完后 allure serve 打开报告）
 python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py "运行 setting_password_idle_lock"
 
 # 运行某优先级全部用例
@@ -112,12 +114,13 @@ python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py --priority P
 
 ### 5. 查看测试报告
 
-跑完后默认会生成并打开 HTML：
+跑完后会**自动启动 Allure 本地服务**并在浏览器打开报告（不要用 `file://` 直接打开 `index.html`，否则会一直 Loading）。
 
 | 类型 | 路径 |
 |------|------|
 | 原始结果 | `allure-results/single/` 或 `allure-results/P1/` |
-| HTML 报告 | `allure-report/single/index.html` |
+| 静态副本 | `allure-report/single/`（可选备份） |
+| 在线查看 | 由 `allure serve` 自动打开 |
 
 不自动打开报告：
 
@@ -125,10 +128,10 @@ python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py --priority P
 python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py --test test_setting_password_idle_lock.py --no-open-report
 ```
 
-手动生成报告：
+手动查看（推荐）：
 
 ```powershell
-allure generate allure-results/single -o allure-report/single --clean
+allure serve allure-results/P1
 ```
 
 ## 用例步骤语法（摘要）
