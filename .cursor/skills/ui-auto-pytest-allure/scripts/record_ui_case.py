@@ -396,7 +396,7 @@ def record_case(args: argparse.Namespace) -> None:
     validate_spec(spec)
 
     capabilities = build_capabilities(udid)
-    save_json(Path("capabilities.json"), capabilities)
+    save_json(Path("capabilities.local.json"), capabilities)
 
     spec_path = Path(args.spec_root) / priority / f"{test_name}.json"
     save_json(spec_path, spec)

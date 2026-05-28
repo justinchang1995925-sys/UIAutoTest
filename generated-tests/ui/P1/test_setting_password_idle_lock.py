@@ -80,6 +80,36 @@ def _wait_for_element(driver, locator: dict, timeout: int = DEFAULT_TIMEOUT):
     return WebDriverWait(driver, timeout).until(EC.visibility_of_element_located(by))
 
 
+def _wait_for_clickable(driver, locator: dict, timeout: int = DEFAULT_TIMEOUT):
+    by = _by(locator)
+    if by is None:
+        raise ValueError("Coordinate locator cannot be used to find an element.")
+    return WebDriverWait(driver, timeout).until(EC.element_to_be_clickable(by))
+
+
+def _post_assert(driver, step: dict, timeout: int):
+    """Optional post-action assertions to improve stability after navigation."""
+    expect_visible = step.get("expect_visible")
+    if isinstance(expect_visible, dict):
+        _wait_for_element(driver, expect_visible, timeout)
+    expect_not_visible = step.get("expect_not_visible")
+    if isinstance(expect_not_visible, dict):
+        by = _by(expect_not_visible)
+        try:
+            WebDriverWait(driver, timeout).until_not(EC.visibility_of_element_located(by))
+        except TimeoutException as exc:
+            raise AssertionError(f"Element is still visible: {expect_not_visible}") from exc
+    expect_activity = step.get("expect_activity")
+    if isinstance(expect_activity, str) and expect_activity.strip():
+        try:
+            current = str(getattr(driver, "current_activity", "") or "")
+            assert expect_activity in current, (
+                f"Expected activity containing {expect_activity!r}, got {current!r}"
+            )
+        except Exception:
+            pass
+
+
 def _tap_coordinates(driver, x: int, y: int):
     finger = PointerInput("touch", "finger")
     actions = ActionBuilder(driver, mouse=finger)
@@ -155,8 +185,10 @@ def _run_step(driver, step: dict):
         if locator and "coordinates" in locator:
             point = locator["coordinates"]
             _tap_coordinates(driver, int(point["x"]), int(point["y"]))
+            _post_assert(driver, step, timeout)
             return
-        _wait_for_element(driver, locator, timeout).click()
+        _wait_for_clickable(driver, locator, timeout).click()
+        _post_assert(driver, step, timeout)
         return
 
     if action in {"input", "set_text"}:
@@ -164,11 +196,13 @@ def _run_step(driver, step: dict):
         if step.get("clear", True):
             element.clear()
         element.send_keys(str(step["value"]))
+        _post_assert(driver, step, timeout)
         return
 
     if action == "set_switch":
         desired_on = str(step.get("state", "")).lower() == "on"
         _set_switch_state(driver, locator, desired_on, timeout)
+        _post_assert(driver, step, timeout)
         return
 
     if action == "assert_visible":
@@ -216,6 +250,14 @@ def _run_step(driver, step: dict):
 
 
 def _run_steps(driver, steps: list[dict]):
+    # Preflight: wait for the first real step target to appear.
+    for first in steps:
+        if first.get("action") == "loop":
+            continue
+        locator = first.get("locator")
+        if isinstance(locator, dict) and "coordinates" not in locator:
+            _wait_for_element(driver, locator, int(first.get("timeout", DEFAULT_TIMEOUT)))
+        break
     for index, step in enumerate(steps, start=1):
         if step["action"] == "loop":
             from_step = int(step["from_step"])

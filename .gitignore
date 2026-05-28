@@ -6,3 +6,4 @@ __pycache__/
 *.pyc
 screenshots/
 .appium-inspector-session.json
+capabilities.local.json

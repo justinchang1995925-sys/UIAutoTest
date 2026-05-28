@@ -53,7 +53,7 @@ def main() -> None:
     spec["priority"] = priority
 
     udid = get_device_id()
-    save_json(Path("capabilities.json"), build_capabilities(udid))
+    save_json(Path("capabilities.local.json"), build_capabilities(udid))
 
     spec_path = Path(args.spec_root) / priority / f"{test_name}.json"
     save_json(spec_path, spec)

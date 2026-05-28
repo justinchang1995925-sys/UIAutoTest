@@ -1,0 +1,15 @@
+{
+    "platformName": "Android",
+    "appium:automationName": "UiAutomator2",
+    "appium:deviceName": "<ANDROID_UDID>",
+    "appium:udid": "<ANDROID_UDID>",
+    "appium:noReset": true,
+    "appium:newCommandTimeout": 300,
+    "appium:disableWindowAnimation": true,
+    "appium:ignoreHiddenApiPolicyError": true,
+    "appium:uiautomator2ServerLaunchTimeout": 120000,
+    "appium:uiautomator2ServerInstallTimeout": 120000,
+    "appium:adbExecTimeout": 120000,
+    "appium:appPackage": "com.pudutech.business.function",
+    "appium:appActivity": "com.pudutech.function.homepage.ui.HomeActivity"
+}

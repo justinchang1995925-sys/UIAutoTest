@@ -114,10 +114,10 @@ def ensure_appium_server(
     )
 
 
-def get_connected_device_id() -> str | None:
+def get_connected_device_ids() -> list[str]:
     adb = shutil.which("adb")
     if not adb:
-        return None
+        return []
     try:
         output = subprocess.run(
             [adb, "devices"],
@@ -126,27 +126,81 @@ def get_connected_device_id() -> str | None:
             text=True,
         ).stdout
     except (OSError, subprocess.CalledProcessError):
-        return None
+        return []
 
+    ids: list[str] = []
     for line in output.splitlines()[1:]:
         line = line.strip()
         if not line:
             continue
         parts = line.split()
         if len(parts) >= 2 and parts[1] == "device":
-            return parts[0]
+            ids.append(parts[0])
+    return ids
+
+
+def get_connected_device_id() -> str | None:
+    ids = get_connected_device_ids()
+    if len(ids) == 1:
+        return ids[0]
+    return None
+
+
+def _preferred_device_id_from_existing_caps(
+    capabilities_path: Path, connected_ids: list[str]
+) -> str | None:
+    """If capabilities already contain a udid that is currently connected, keep it."""
+    try:
+        if capabilities_path.exists():
+            caps = json.loads(capabilities_path.read_text(encoding="utf-8-sig"))
+            udid = str(caps.get("appium:udid") or "").strip()
+            if udid and udid in connected_ids:
+                return udid
+    except Exception:
+        return None
     return None
 
 
 def sync_capabilities_device(capabilities_path: Path) -> str | None:
-    device_id = get_connected_device_id()
-    if not device_id:
+    connected = get_connected_device_ids()
+    if not connected:
         print("Warning: no authorized Android device found for capabilities sync.")
         return None
 
+    if capabilities_path.is_dir():
+        capabilities_path = capabilities_path / "capabilities.local.json"
+
     if not capabilities_path.exists():
-        print(f"Warning: capabilities file not found: {capabilities_path}")
-        return device_id
+        template = capabilities_path.parent / "capabilities.template.json"
+        fallback = capabilities_path.parent / "capabilities.json"
+        if template.exists():
+            capabilities_path.write_text(template.read_text(encoding="utf-8-sig"), encoding="utf-8")
+            print(f"Created local capabilities from template: {capabilities_path}")
+        elif fallback.exists():
+            capabilities_path.write_text(fallback.read_text(encoding="utf-8-sig"), encoding="utf-8")
+            print(f"Created local capabilities from capabilities.json: {capabilities_path}")
+        else:
+            print(
+                "Warning: no capabilities file found for sync. "
+                f"Expected one of: {capabilities_path}, {template}, {fallback}"
+            )
+            return device_id
+
+    # Choose device:
+    # - Prefer the udid already recorded in the capabilities file (if connected)
+    # - Else if exactly one device is connected, use it
+    # - Else refuse to guess
+    preferred = _preferred_device_id_from_existing_caps(capabilities_path, connected)
+    if preferred:
+        device_id = preferred
+    elif len(connected) == 1:
+        device_id = connected[0]
+    else:
+        print(
+            "Warning: multiple Android devices connected; cannot auto-select udid. "
+            f"Connected: {', '.join(connected)}"
+        )
+        return None
 
     caps = json.loads(capabilities_path.read_text(encoding="utf-8-sig"))
     if caps.get("appium:udid") == device_id and caps.get("appium:deviceName") == device_id:
@@ -160,3 +214,40 @@ def sync_capabilities_device(capabilities_path: Path) -> str | None:
     )
     print(f"Updated capabilities device id: {device_id}")
     return device_id
+
+
+def adb_connect(device: str) -> bool:
+    """Connect a device over network, e.g. 192.168.1.8:5555.
+
+    Returns True when adb reports connected/already connected.
+    """
+    value = device.strip()
+    if not value:
+        return False
+    adb = shutil.which("adb")
+    if not adb:
+        raise SystemExit("adb is not available in PATH.")
+    result = subprocess.run([adb, "connect", value], check=False, capture_output=True, text=True)
+    output = (result.stdout or "") + "\n" + (result.stderr or "")
+    output = output.strip().lower()
+    if result.returncode == 0 and ("connected" in output or "already connected" in output):
+        print(f"adb connect ok: {device}")
+        return True
+    print(f"adb connect failed: {device}\n{output}".rstrip())
+    return False
+
+
+def set_capabilities_device_id(capabilities_path: Path, device_id: str) -> None:
+    """Force capabilities file to use a specific udid/deviceName."""
+    if capabilities_path.is_dir():
+        capabilities_path = capabilities_path / "capabilities.local.json"
+    if not capabilities_path.exists():
+        sync_capabilities_device(capabilities_path)
+    caps = json.loads(capabilities_path.read_text(encoding="utf-8-sig"))
+    caps["appium:udid"] = device_id
+    caps["appium:deviceName"] = device_id
+    capabilities_path.write_text(
+        json.dumps(caps, ensure_ascii=False, indent=4) + "\n",
+        encoding="utf-8",
+    )
+    print(f"Set capabilities device id: {device_id}")

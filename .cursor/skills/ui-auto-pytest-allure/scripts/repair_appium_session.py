@@ -177,10 +177,18 @@ def _repair_uiautomator2_on_device() -> None:
 
 
 def _load_capabilities(project_root: Path) -> dict:
-    path = project_root / "capabilities.json"
-    if not path.exists():
-        raise SystemExit(f"capabilities.json not found: {path}")
-    return json.loads(path.read_text(encoding="utf-8-sig"))
+    candidates = [
+        project_root / "capabilities.local.json",
+        project_root / "capabilities.json",
+        project_root / "capabilities.template.json",
+    ]
+    for path in candidates:
+        if path.exists():
+            return json.loads(path.read_text(encoding="utf-8-sig"))
+    raise SystemExit(
+        "No capabilities file found. Expected one of:\n"
+        + "\n".join(f"  - {p}" for p in candidates)
+    )
 
 
 def _create_session(server_url: str, capabilities: dict) -> str:

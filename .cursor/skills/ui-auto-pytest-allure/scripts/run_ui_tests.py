@@ -15,10 +15,20 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
 from allure_cli import augmented_path_env, resolve_allure_command  # noqa: E402
-from appium_server import ensure_appium_server, sync_capabilities_device  # noqa: E402
+from appium_server import (  # noqa: E402
+    adb_connect,
+    ensure_appium_server,
+    set_capabilities_device_id,
+    sync_capabilities_device,
+)
 from project_paths import resolve_project_root  # noqa: E402
 
 PROJECT_ROOT = resolve_project_root(SCRIPT_DIR)
+
+CONNECT_AND_RUN_RE = re.compile(
+    r"连接设备\s*([0-9]{1,3}(?:\.[0-9]{1,3}){3}:\d{2,5})\s*并\s*(.+)$",
+    re.IGNORECASE,
+)
 
 PRIORITY_PATTERNS = [
     re.compile(r"运行\s*P([0-4])\s*测试用例", re.IGNORECASE),
@@ -98,8 +108,18 @@ def parse_natural_language_request(text: str) -> tuple[str, str | None]:
     raise ValueError(
         "Unsupported run request. Examples:\n"
         "  运行P0测试用例\n"
+        "  连接设备 192.168.1.8:5555 并运行P1测试用例\n"
         "  运行test_setting_password_idle_lock.py"
     )
+
+
+def parse_connect_and_run(text: str) -> tuple[str | None, str]:
+    """Return (device_ip_port or None, remaining request text)."""
+    raw = text.strip()
+    match = CONNECT_AND_RUN_RE.match(raw)
+    if not match:
+        return None, raw
+    return match.group(1).strip(), match.group(2).strip()
 
 
 def normalize_test_file_name(name: str) -> str:
@@ -275,22 +295,28 @@ def main() -> None:
 
     ensure_dependencies(args.skip_install)
 
-    if not args.skip_appium_start:
-        ensure_appium_server(PROJECT_ROOT)
-        sync_capabilities_device(PROJECT_ROOT / "capabilities.json")
-
     test_root = Path(args.test_root)
     allure_root = Path(args.allure_root)
 
+    requested_device = None
     if args.priority:
         mode, target = "priority", args.priority.upper()
     elif args.test:
         mode, target = "test", normalize_test_file_name(args.test)
     elif args.request:
-        mode, target = parse_natural_language_request(args.request)
+        requested_device, remaining = parse_connect_and_run(args.request)
+        mode, target = parse_natural_language_request(remaining)
     else:
         parser.print_help()
         raise SystemExit(2)
+
+    if requested_device:
+        adb_connect(requested_device)
+        set_capabilities_device_id(PROJECT_ROOT / "capabilities.local.json", requested_device)
+
+    if not args.skip_appium_start:
+        ensure_appium_server(PROJECT_ROOT)
+        sync_capabilities_device(PROJECT_ROOT / "capabilities.local.json")
 
     if mode == "priority":
         exit_code, allure_dir = run_priority_tests(target, test_root, allure_root, args.pytest_args)

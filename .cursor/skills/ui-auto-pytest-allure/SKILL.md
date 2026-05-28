@@ -84,7 +84,33 @@ python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py --test test_
 
 When the user message matches a run command, run `run_ui_tests.py` immediately. Do not execute test files with plain `python`.
 
-Before tests, `run_ui_tests.py` **auto-starts Appium** if needed and syncs `capabilities.json` device id from `adb devices`.
+Before tests, `run_ui_tests.py` **auto-starts Appium** if needed and ensures a usable capabilities file exists.
+
+### Device connection (USB or IP)
+
+Default behavior: if the user says `运行P1测试用例`, it runs against the current connected Android device (typically USB, but Wi‑Fi `adb` also works).
+
+If the user says:
+
+- `连接设备 192.168.140.172:5555 并运行P1测试用例`
+
+Then `run_ui_tests.py` will:
+
+- Run `adb connect 192.168.140.172:5555`
+- Force `capabilities.local.json` to use `appium:udid=device_ip:port`
+- Start Appium and run tests
+
+### Capabilities files (template + local)
+
+Capabilities are loaded in this order:
+
+- `APPIUM_CAPABILITIES` env (JSON string)
+- `APPIUM_CAPABILITIES_FILE` env (path)
+- `capabilities.local.json` (local overrides, **ignored by git**)
+- `capabilities.json` (legacy)
+- `capabilities.template.json` (committed template)
+
+`capabilities.local.json` is created automatically from `capabilities.template.json` on first run (when missing).
 
 After tests finish, it runs **`allure serve`** (local HTTP server) to open the report. Do not open `index.html` via `file://` or widgets stay on Loading. Use `--no-open-report` to skip.
 
@@ -95,6 +121,15 @@ python .cursor/skills/ui-auto-pytest-allure/scripts/install_allure_cli.py
 ```
 
 **Never run a generated test file directly with `python test_xxx.py`.** Always use `pytest` so fixtures, markers, and Allure hooks work.
+
+### Failure attachments (Allure)
+
+On test failure, the generated `conftest.py` automatically attaches to Allure:
+
+- screenshot (PNG)
+- page source (XML)
+- current activity (when available)
+- logcat tail (prefers Appium `driver.get_log("logcat")`, falls back to `adb logcat`)
 
 Correct:
 
