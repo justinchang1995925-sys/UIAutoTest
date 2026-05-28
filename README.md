@@ -9,6 +9,7 @@
 - 一键运行用例，自动生成并打开 **Allure HTML** 报告
 - 自动安装 Python 依赖、Allure CLI、JRE（Windows）
 - Appium Inspector 查元素、修复会话脚本
+- 支持两种运行说法：默认 USB/已连接设备；或先 `adb connect` 指定 IP:port 再运行
 
 ## 环境要求
 
@@ -39,7 +40,9 @@ UIAutoTest/
 │   └── P1/
 ├── allure-results/           # 测试原始结果（JSON，可删）
 ├── allure-report/            # HTML 报告（自动生成）
-├── capabilities.json         # Appium 连接配置
+├── capabilities.template.json # Appium 连接配置模板（提交到仓库）
+├── capabilities.local.json    # 本地覆盖（自动生成，git 忽略）
+├── capabilities.json          # 兼容旧版（legacy）
 ├── docs/CASE_IMPORT.md       # 表格批量导入说明
 └── .cursor/skills/ui-auto-pytest-allure/  # 生成与运行脚本
 ```
@@ -93,14 +96,17 @@ python .cursor/skills/ui-auto-pytest-allure/scripts/import_cases_from_sheet.py c
 
 ### 4. 运行用例
 
-运行前会**自动启动 Appium**（若未运行），并同步 `capabilities.json` 中的设备 ID。
+运行前会**自动启动 Appium**（若未运行），并确保能力文件可用（优先使用 `capabilities.local.json`）。
 
 ```powershell
 # 运行单条用例（自动启动 Appium + 跑完后 allure serve 打开报告）
 python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py "运行 setting_password_idle_lock"
 
-# 运行某优先级全部用例
+# 运行某优先级全部用例（默认：使用当前已连接设备，通常为 USB）
 python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py "运行P1测试用例"
+
+# 先连接指定设备 IP:port 再运行（adb over Wi‑Fi）
+python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py "连接设备 192.168.140.172:5555 并运行P1测试用例"
 ```
 
 等价命令：
@@ -133,6 +139,18 @@ python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py --test test_
 ```powershell
 allure serve allure-results/P1
 ```
+
+### 6. capabilities 文件说明（建议使用 template + local）
+
+能力文件加载优先级：
+
+1. `APPIUM_CAPABILITIES`（环境变量，JSON 字符串）
+2. `APPIUM_CAPABILITIES_FILE`（环境变量，文件路径）
+3. `capabilities.local.json`（本地覆盖，**不提交**）
+4. `capabilities.json`（旧版兼容）
+5. `capabilities.template.json`（仓库模板）
+
+首次运行时，如果没有 `capabilities.local.json`，会从 `capabilities.template.json` 自动生成一份。
 
 ## 用例步骤语法（摘要）
 
