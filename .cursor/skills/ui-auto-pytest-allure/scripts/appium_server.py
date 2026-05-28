@@ -61,10 +61,17 @@ def start_appium_server(
 
     host, port = parse_server_url(server_url)
     env = _configure_android_env(os.environ.copy(), project_root)
+    logs_dir = project_root / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    log_file = logs_dir / "appium-server.log"
     command = [
         appium_cmd,
         "--use-plugins=inspector",
         "--allow-insecure=*:session_discovery",
+        "--log",
+        str(log_file),
+        "--log-level",
+        "info",
         "--address",
         host,
         "--port",
@@ -235,6 +242,52 @@ def adb_connect(device: str) -> bool:
         return True
     print(f"adb connect failed: {device}\n{output}".rstrip())
     return False
+
+
+def adb_connect_ip(ip: str, ports: list[int] | None = None) -> str | None:
+    """Try adb connect to an IP with common ports.
+
+    Returns the successful ip:port string, or None.
+    """
+    value = ip.strip()
+    if not value:
+        return None
+    candidates = ports or [5555, 5556, 37099, 37100]
+    for port in candidates:
+        target = f"{value}:{port}"
+        if adb_connect(target):
+            return target
+    return None
+
+
+def connect_device(target: str) -> str:
+    """Ensure a target device is connected via adb.
+
+    - If target is ip:port -> adb connect ip:port
+    - If target is ip only -> try common ports and connect
+    - Otherwise treat as udid (USB) and do not connect
+
+    Returns the udid to use in capabilities (possibly normalized to ip:port).
+    """
+    value = target.strip()
+    if not value:
+        raise ValueError("Empty device target.")
+
+    if re.fullmatch(r"[0-9]{1,3}(?:\.[0-9]{1,3}){3}:\d{2,5}", value):
+        adb_connect(value)
+        return value
+
+    if re.fullmatch(r"[0-9]{1,3}(?:\.[0-9]{1,3}){3}", value):
+        connected = adb_connect_ip(value)
+        if not connected:
+            raise SystemExit(
+                f"Could not adb-connect to {value}. "
+                "Provide an explicit port, e.g. 192.168.1.8:5555."
+            )
+        return connected
+
+    # Assume it's an adb udid (USB or already-connected network device).
+    return value
 
 
 def set_capabilities_device_id(capabilities_path: Path, device_id: str) -> None:

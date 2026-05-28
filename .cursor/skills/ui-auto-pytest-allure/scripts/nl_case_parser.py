@@ -81,6 +81,15 @@ STEP_PATTERNS = [
     ),
 ]
 
+EXPECT_SUFFIX_RE = re.compile(
+    r"^(?P<body>.+?)[，,]\s*期望(?:出现|可见)\s*(?P<visible>.+?)\s*$",
+    re.IGNORECASE,
+)
+EXPECT_ACTIVITY_SUFFIX_RE = re.compile(
+    r"^(?P<body>.+?)[，,]\s*期望(?:activity|Activity)\s*(?P<activity>.+?)\s*$",
+    re.IGNORECASE,
+)
+
 
 def normalize_switch_state(value: str) -> str:
     text = value.strip().lower()
@@ -131,6 +140,21 @@ def parse_step_line(line: str) -> dict[str, Any] | None:
     if not raw or raw.startswith("#"):
         return None
 
+    # Optional post-action expectations, e.g.:
+    #   步骤2: 点击 密码与安全，期望出现 电机锁
+    #   步骤2: 点击 xxx，期望activity com.xxx.MainActivity
+    expect_visible: dict[str, Any] | None = None
+    expect_activity: str | None = None
+
+    match = EXPECT_SUFFIX_RE.match(raw)
+    if match:
+        raw = match.group("body").strip()
+        expect_visible = parse_locator(match.group("visible"))
+    match = EXPECT_ACTIVITY_SUFFIX_RE.match(raw)
+    if match:
+        raw = match.group("body").strip()
+        expect_activity = match.group("activity").strip()
+
     for action, pattern in STEP_PATTERNS:
         match = pattern.match(raw)
         if not match:
@@ -152,12 +176,17 @@ def parse_step_line(line: str) -> dict[str, Any] | None:
         step_number = match.group(1)
         if action == "input":
             field, value = match.group(2), match.group(3)
-            return {
+            step = {
                 "name": f"Step {step_number} input {field}",
                 "action": "input",
                 "locator": parse_locator(field),
                 "value": value.strip(),
             }
+            if expect_visible:
+                step["expect_visible"] = expect_visible
+            if expect_activity:
+                step["expect_activity"] = expect_activity
+            return step
 
         if action == "assert_text":
             target, expected = match.group(2), match.group(3)
@@ -177,12 +206,17 @@ def parse_step_line(line: str) -> dict[str, Any] | None:
                 state = normalize_switch_state(second)
                 target = first
             state_label = "打开" if state == "on" else "关闭"
-            return {
+            step = {
                 "name": f"Step {step_number} set switch {target} {state_label}",
                 "action": "set_switch",
                 "locator": parse_locator(target),
                 "state": state,
             }
+            if expect_visible:
+                step["expect_visible"] = expect_visible
+            if expect_activity:
+                step["expect_activity"] = expect_activity
+            return step
 
         target = match.group(2) if action != "sleep" else ""
         if action == "assert_visible":
@@ -192,11 +226,16 @@ def parse_step_line(line: str) -> dict[str, Any] | None:
                 "locator": parse_locator(target),
             }
 
-        return {
+        step = {
             "name": f"Step {step_number} Tap {target}",
             "action": "tap",
             "locator": parse_locator(target),
         }
+        if expect_visible:
+            step["expect_visible"] = expect_visible
+        if expect_activity:
+            step["expect_activity"] = expect_activity
+        return step
 
     return None
 

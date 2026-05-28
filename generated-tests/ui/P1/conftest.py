@@ -88,6 +88,66 @@ def _adb_logcat_tail(lines: int = 250) -> str | None:
     return output or None
 
 
+def _project_root() -> Path:
+    current = Path.cwd().resolve()
+    for candidate in [current, *current.parents]:
+        if (candidate / "generated-tests").is_dir() and (candidate / "cases").is_dir():
+            return candidate
+        if (candidate / "capabilities.local.json").is_file():
+            return candidate
+        if (candidate / "capabilities.json").is_file():
+            return candidate
+        if (candidate / "capabilities.template.json").is_file():
+            return candidate
+    return current
+
+
+def _tail_text_file(path: Path, max_chars: int = 20000) -> str | None:
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    if not text.strip():
+        return None
+    if len(text) > max_chars:
+        return text[-max_chars:]
+    return text
+
+
+def _attach_appium_server_log_tail() -> None:
+    log_path = _project_root() / "logs" / "appium-server.log"
+    text = _tail_text_file(log_path)
+    if text:
+        _safe_attach_text("appium_server_log_tail", text)
+
+
+def _screenrecord_on_failure(seconds: int = 12) -> Path | None:
+    """Record a short failure video via adb and return local path."""
+    if os.getenv("UIATEST_SCREENRECORD_ON_FAIL", "").lower() not in {"1", "true", "yes"}:
+        return None
+    try:
+        subprocess.run(["adb", "version"], check=True, capture_output=True, text=True)
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+    remote = f"/sdcard/uiatest_fail_{int(time.time())}.mp4"
+    local_dir = _project_root() / "artifacts"
+    local_dir.mkdir(parents=True, exist_ok=True)
+    local = local_dir / Path(remote).name
+
+    subprocess.run(
+        ["adb", "shell", "screenrecord", "--time-limit", str(int(seconds)), remote],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(["adb", "pull", remote, str(local)], check=False, capture_output=True, text=True)
+    subprocess.run(["adb", "shell", "rm", "-f", remote], check=False, capture_output=True, text=True)
+    if local.exists() and local.stat().st_size > 0:
+        return local
+    return None
+
+
 @pytest.hookimpl(hookwrapper=True, tryfirst=True)
 def pytest_runtest_makereport(item, call):
     outcome = yield
@@ -133,12 +193,32 @@ def pytest_runtest_makereport(item, call):
     if logcat_text:
         _safe_attach_text("logcat_tail", logcat_text)
 
+    _attach_appium_server_log_tail()
+
+    video = _screenrecord_on_failure()
+    if video:
+        try:
+            allure.attach.file(str(video), name=video.name, attachment_type=allure.attachment_type.MP4)
+        except Exception:
+            pass
+
 
 @pytest.fixture
 def driver():
     server_url = os.getenv("APPIUM_SERVER_URL", "http://127.0.0.1:4723")
-    options = AppiumOptions().load_capabilities(_load_capabilities())
+    capabilities = _load_capabilities()
+    options = AppiumOptions().load_capabilities(capabilities)
     app_driver = webdriver.Remote(command_executor=server_url, options=options)
+    # Best-effort: bring target app to foreground to reduce flakiness.
+    package = str(capabilities.get("appium:appPackage") or capabilities.get("appPackage") or "").strip()
+    activity = str(capabilities.get("appium:appActivity") or capabilities.get("appActivity") or "").strip()
+    try:
+        if package and hasattr(app_driver, "activate_app"):
+            app_driver.activate_app(package)
+        if package and activity and hasattr(app_driver, "start_activity"):
+            app_driver.start_activity(package, activity)
+    except Exception:
+        pass
     try:
         yield app_driver
     finally:

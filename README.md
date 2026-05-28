@@ -29,6 +29,12 @@ python .cursor/skills/ui-auto-pytest-allure/scripts/install_ui_dependencies.py
 
 将自动安装：`pytest`、`allure-pytest`、`Appium-Python-Client`，以及项目内 `.tools/` 下的 **Allure CLI** 与 **JRE**，并配置用户环境变量。
 
+也可以使用统一入口（推荐）：
+
+```powershell
+python uiatest.py --help
+```
+
 ## 目录结构
 
 ```text
@@ -107,6 +113,14 @@ python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py "运行P1测
 
 # 先连接指定设备 IP:port 再运行（adb over Wi‑Fi）
 python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py "连接设备 192.168.140.172:5555 并运行P1测试用例"
+```
+
+使用统一入口运行：
+
+```powershell
+python uiatest.py run "运行P1测试用例"
+python uiatest.py run "连接设备 192.168.140.172:5555 并运行P1测试用例"
+python uiatest.py run --device 192.168.140.172:5555 --priority P1
 ```
 
 等价命令：

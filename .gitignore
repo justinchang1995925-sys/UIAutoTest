@@ -7,3 +7,5 @@ __pycache__/
 screenshots/
 .appium-inspector-session.json
 capabilities.local.json
+logs/
+artifacts/

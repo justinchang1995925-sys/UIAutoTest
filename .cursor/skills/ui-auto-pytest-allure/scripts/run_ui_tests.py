@@ -16,7 +16,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 from allure_cli import augmented_path_env, resolve_allure_command  # noqa: E402
 from appium_server import (  # noqa: E402
-    adb_connect,
+    connect_device,
     ensure_appium_server,
     set_capabilities_device_id,
     sync_capabilities_device,
@@ -25,10 +25,7 @@ from project_paths import resolve_project_root  # noqa: E402
 
 PROJECT_ROOT = resolve_project_root(SCRIPT_DIR)
 
-CONNECT_AND_RUN_RE = re.compile(
-    r"连接设备\s*([0-9]{1,3}(?:\.[0-9]{1,3}){3}:\d{2,5})\s*并\s*(.+)$",
-    re.IGNORECASE,
-)
+CONNECT_AND_RUN_RE = re.compile(r"连接设备\s*([^\s]+)\s*并\s*(.+)$", re.IGNORECASE)
 
 PRIORITY_PATTERNS = [
     re.compile(r"运行\s*P([0-4])\s*测试用例", re.IGNORECASE),
@@ -279,6 +276,10 @@ def main() -> None:
         help="Do not auto-start Appium before running tests.",
     )
     parser.add_argument(
+        "--device",
+        help="Target device udid or ip[:port]. If ip is given without port, tries common ports (e.g. 5555).",
+    )
+    parser.add_argument(
         "--open-report",
         action="store_true",
         default=True,
@@ -298,21 +299,23 @@ def main() -> None:
     test_root = Path(args.test_root)
     allure_root = Path(args.allure_root)
 
-    requested_device = None
+    requested_device = args.device.strip() if args.device else None
     if args.priority:
         mode, target = "priority", args.priority.upper()
     elif args.test:
         mode, target = "test", normalize_test_file_name(args.test)
     elif args.request:
-        requested_device, remaining = parse_connect_and_run(args.request)
+        nl_device, remaining = parse_connect_and_run(args.request)
+        if nl_device:
+            requested_device = nl_device
         mode, target = parse_natural_language_request(remaining)
     else:
         parser.print_help()
         raise SystemExit(2)
 
     if requested_device:
-        adb_connect(requested_device)
-        set_capabilities_device_id(PROJECT_ROOT / "capabilities.local.json", requested_device)
+        udid = connect_device(requested_device)
+        set_capabilities_device_id(PROJECT_ROOT / "capabilities.local.json", udid)
 
     if not args.skip_appium_start:
         ensure_appium_server(PROJECT_ROOT)
