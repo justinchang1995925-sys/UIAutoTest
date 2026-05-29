@@ -2,6 +2,8 @@
 
 基于 **自然语言 / 表格** 描述 UI 操作，自动生成 **pytest + Allure + Appium** 可执行用例，支持 Android 真机自动化与 HTML 测试报告。
 
+> **不用 Cursor Agent？** 见 [手动使用指南](docs/MANUAL_USAGE.md)（本地命令行：写用例 → 生成 → 运行 → 看报告）。
+
 ## 功能概览
 
 - 用 `.nl` 自然语言或 **Excel / 飞书云表格（CSV）** 批量编写用例
@@ -50,6 +52,7 @@ UIAutoTest/
 ├── capabilities.local.json    # 本地覆盖（自动生成，git 忽略）
 ├── capabilities.json          # 兼容旧版（legacy）
 ├── docs/CASE_IMPORT.md       # 表格批量导入说明
+├── docs/MANUAL_USAGE.md      # 手动使用指南（不依赖 Agent）
 └── .cursor/skills/ui-auto-pytest-allure/  # 生成与运行脚本
 ```
 
@@ -208,6 +211,7 @@ A: 手机上允许 USB 调试，执行 `adb kill-server` 后 `adb devices`。
 
 ## 相关文档
 
+- [手动使用指南（不依赖 Agent）](docs/MANUAL_USAGE.md)
 - [表格批量导入](docs/CASE_IMPORT.md)
 - [技能与脚本说明](.cursor/skills/ui-auto-pytest-allure/SKILL.md)
 - [规格参考](.cursor/skills/ui-auto-pytest-allure/reference.md)
