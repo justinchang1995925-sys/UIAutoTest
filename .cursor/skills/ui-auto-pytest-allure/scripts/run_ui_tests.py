@@ -46,8 +46,10 @@ TEST_FILE_PATTERNS = [
 ]
 
 
-def repair_inspector_session(skip_repair: bool) -> None:
-    if skip_repair or os.getenv("APPIUM_SKIP_AUTO_REPAIR", "").lower() in {"1", "true", "yes"}:
+def repair_inspector_session(auto_repair: bool) -> None:
+    if not auto_repair:
+        return
+    if os.getenv("APPIUM_SKIP_AUTO_REPAIR", "").lower() in {"1", "true", "yes"}:
         return
 
     repair_script = SCRIPT_DIR / "repair_appium_session.py"
@@ -68,8 +70,22 @@ def repair_inspector_session(skip_repair: bool) -> None:
         )
 
 
+def _python_deps_satisfied() -> bool:
+    try:
+        import pytest  # noqa: F401
+        import allure  # noqa: F401
+        import appium  # noqa: F401
+        import selenium  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
 def ensure_dependencies(skip_install: bool) -> None:
     if skip_install:
+        return
+    if _python_deps_satisfied() and resolve_allure_command(PROJECT_ROOT, auto_install=False):
+        print("Python dependencies and Allure CLI are ready; skipping install.")
         return
     installer = SCRIPT_DIR / "install_ui_dependencies.py"
     print("Checking and installing UI test dependencies...")
@@ -283,9 +299,14 @@ def main() -> None:
     parser.add_argument("--allure-root", default="allure-results")
     parser.add_argument("--skip-install", action="store_true")
     parser.add_argument(
+        "--auto-repair",
+        action="store_true",
+        help="Repair Appium/UiAutomator2 after tests (for Inspector). Default: off.",
+    )
+    parser.add_argument(
         "--skip-repair",
         action="store_true",
-        help="Skip Appium/UiAutomator2 repair after tests (not recommended for Inspector).",
+        help="(Legacy) Same as default; post-run repair is off unless --auto-repair.",
     )
     parser.add_argument(
         "--skip-appium-start",
@@ -361,7 +382,12 @@ def main() -> None:
         exit_code, allure_dir = run_single_test(target, test_root, allure_root, args.pytest_args)
         report_name = "single"
 
-    repair_inspector_session(args.skip_repair)
+    auto_repair = args.auto_repair or os.getenv("UIATEST_AUTO_REPAIR", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    repair_inspector_session(auto_repair)
 
     if args.open_report:
         open_allure_html_report(allure_dir, report_name, static_report=args.static_report)

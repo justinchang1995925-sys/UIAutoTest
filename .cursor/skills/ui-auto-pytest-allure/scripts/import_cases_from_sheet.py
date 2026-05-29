@@ -152,6 +152,8 @@ def main() -> None:
     print("Optional headers: 预期结果、标题、套件")
     print()
 
+    imported_priorities: set[str] = set()
+
     for row_number, test_name, nl_text in cases:
         print(f"--- Row {row_number}: {test_name} ---")
         if args.dry_run:
@@ -173,6 +175,7 @@ def main() -> None:
             resolve_locators=not args.no_resolve_locators,
             udid=args.udid,
         )
+        imported_priorities.add(spec_path.parent.name)
         print(f"  Spec: {spec_path}")
         print(f"  Test: {test_path}")
         print()
@@ -181,6 +184,8 @@ def main() -> None:
         print("Dry run complete. No files written.")
     else:
         print(f"Imported {len(cases)} case(s).")
+        for priority in sorted(imported_priorities):
+            print(f"  Run {priority}: python uiatest.py run --priority {priority}")
 
 
 if __name__ == "__main__":

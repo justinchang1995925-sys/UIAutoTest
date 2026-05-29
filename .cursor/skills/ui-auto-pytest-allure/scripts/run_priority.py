@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""Run generated UI regression tests by priority."""
+"""Run generated UI regression tests by priority.
+
+Deprecated: prefer `python uiatest.py run --priority P1`.
+"""
 
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
-
-from run_ui_tests import ensure_dependencies, run_priority_tests  # noqa: E402
 
 
 def main() -> None:
@@ -22,15 +24,25 @@ def main() -> None:
     parser.add_argument("pytest_args", nargs="*", help="Additional pytest arguments.")
     args = parser.parse_args()
 
-    ensure_dependencies(args.skip_install)
-    raise SystemExit(
-        run_priority_tests(
-            args.priority.upper(),
-            Path(args.test_root),
-            Path(args.allure_root),
-            args.pytest_args,
-        )
+    print(
+        "Note: run_priority.py is deprecated. "
+        f"Use: python uiatest.py run --priority {args.priority.upper()}"
     )
+
+    forward = [
+        "--priority",
+        args.priority.upper(),
+        "--test-root",
+        args.test_root,
+        "--allure-root",
+        args.allure_root,
+        *args.pytest_args,
+    ]
+    if args.skip_install:
+        forward.append("--skip-install")
+
+    runner = SCRIPT_DIR / "run_ui_tests.py"
+    raise SystemExit(subprocess.call([sys.executable, str(runner), *forward], cwd=str(Path.cwd())))
 
 
 if __name__ == "__main__":

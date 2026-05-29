@@ -64,6 +64,8 @@ def _adb_command(*args: str) -> list[str]:
 
 
 def _repair_uiautomator2_on_device() -> None:
+    if os.getenv("APPIUM_SKIP_U2_REPAIR", "").lower() in {"1", "true", "yes"}:
+        return
     packages = (
         "io.appium.uiautomator2.server",
         "io.appium.uiautomator2.server.test",
@@ -226,22 +228,33 @@ def pytest_runtest_makereport(item, call):
             pass
 
 
+def _app_startup_delay() -> float:
+    raw = os.getenv("UIATEST_APP_STARTUP_SEC", "0.5").strip()
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return 0.5
+
+
 @pytest.fixture
 def driver():
     server_url = os.getenv("APPIUM_SERVER_URL", "http://127.0.0.1:4723")
     capabilities = _load_capabilities()
     options = AppiumOptions().load_capabilities(capabilities)
     app_driver = webdriver.Remote(command_executor=server_url, options=options)
-    # Best-effort: bring target app to foreground to reduce flakiness.
+    try:
+        app_driver.implicitly_wait(0)
+    except Exception:
+        pass
     package = str(capabilities.get("appium:appPackage") or capabilities.get("appPackage") or "").strip()
-    activity = str(capabilities.get("appium:appActivity") or capabilities.get("appActivity") or "").strip()
     try:
         if package and hasattr(app_driver, "activate_app"):
             app_driver.activate_app(package)
-        if package and activity and hasattr(app_driver, "start_activity"):
-            app_driver.start_activity(package, activity)
     except Exception:
         pass
+    startup_delay = _app_startup_delay()
+    if startup_delay > 0:
+        time.sleep(startup_delay)
     try:
         yield app_driver
     finally:

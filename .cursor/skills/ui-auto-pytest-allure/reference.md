@@ -147,15 +147,21 @@ When only visible text is given, the parser generates:
 From JSON spec:
 
 ```bash
-python .cursor/skills/ui-auto-pytest-allure/scripts/generate_ui_test.py specs/P1/login_success.json --output generated-tests/ui/P1
+python .cursor/skills/ui-auto-pytest-allure/scripts/generate_ui_test.py specs/P1/login_success.json --output generated-tests/ui
+```
+
+Or from natural language:
+
+```bash
+python uiatest.py gen cases/your_case.nl
 ```
 
 Generated files:
 
 - `generated-tests/ui/<priority>/test_<test_name>.py`
-- `generated-tests/ui/<priority>/conftest.py`
-- `generated-tests/ui/<priority>/requirements.txt`
-- `generated-tests/ui/<priority>/pytest.ini`
+- `generated-tests/ui/conftest.py` (shared across priorities)
+- `generated-tests/ui/requirements.txt`
+- `generated-tests/ui/pytest.ini`
 
 ## Python Dependencies
 
@@ -174,86 +180,30 @@ generated-tests/ui/requirements.txt
 Do not execute `test_*.py` directly with `python`. Use:
 
 ```bash
-python -m pytest generated-tests/ui/P1 -m P1 --alluredir=allure-results/P1
+python uiatest.py run --priority P1
 ```
 
 ## Runtime Configuration
 
-The generated `driver` fixture reads:
+The shared `driver` fixture in `generated-tests/ui/conftest.py` reads capabilities in this order:
 
-- `APPIUM_SERVER_URL`, defaulting to `http://127.0.0.1:4723`.
-- `APPIUM_CAPABILITIES`, a JSON string.
-- `capabilities.json`, used when `APPIUM_CAPABILITIES` is not set.
+- `APPIUM_CAPABILITIES` (env JSON string)
+- `APPIUM_CAPABILITIES_FILE` (env path)
+- `capabilities.local.json` (local, gitignored)
+- `capabilities.json` (legacy placeholder)
+- `capabilities.template.json`
+
+Also uses `APPIUM_SERVER_URL` (default `http://127.0.0.1:4723`).
 
 Do not store passwords, tokens, or production credentials in generated specs.
-
-## Live Preview After Generation
-
-Each natural-language generation updates:
-
-- `recording/live_spec.json`
-- `recording/live_test.py`
-- `recording/README.md`
-
-Refresh preview after manual JSON edits:
-
-```bash
-python .cursor/skills/ui-auto-pytest-allure/scripts/refresh_recording_preview.py
-```
-
-## Legacy Device Tap Recording
-
-Only when the user explicitly asks to record by tapping the device:
-
-```bash
-python .cursor/skills/ui-auto-pytest-allure/scripts/record_ui_case.py
-```
-
-The recorder:
-- Reads the connected Android device with `adb devices`.
-- Dumps current UI XML before each user tap.
-- Waits for the user to tap the target control on the Android device.
-- Captures tap coordinates from `adb shell getevent -lt`.
-- Finds the smallest XML node containing the tap point.
-- Converts the node into the best locator:
-  - `resource-id` -> `id`
-  - `content-desc` -> `accessibility_id`
-  - `text` -> `android_uiautomator`
-  - `class` -> `xpath`
-  - fallback -> `coordinates`
-- Saves specs under `specs/<priority>/`.
-- Generates pytest files under `generated-tests/ui/<priority>/`.
-
-Recorder commands:
-
-```text
-tap 点击登录按钮
-input 输入账号 | demo_user
-assert_visible 校验首页标题
-sleep 2
-loop 1-3 2
-done
-```
-
-Loop spec example:
-
-```json
-{
-  "name": "Loop steps 1-3",
-  "action": "loop",
-  "from_step": 1,
-  "to_step": 3,
-  "times": 2
-}
-```
 
 ## Running Tests
 
 Primary command:
 
 ```bash
-python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py "运行P0测试用例"
-python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py "运行test_setting_password_idle_lock.py"
+python uiatest.py run "运行P0测试用例"
+python uiatest.py run --test test_setting_password_idle_lock.py
 ```
 
 Supported natural-language patterns:
@@ -263,64 +213,25 @@ Supported natural-language patterns:
 | Batch by priority | `运行P0测试用例`, `执行P1用例`, `运行 P2` |
 | Single test file | `运行test_setting_password_idle_lock.py`, `运行 test_demo` |
 
-CLI alternatives:
-
-```bash
-python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py --priority P0
-python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py --test test_setting_password_idle_lock.py
-```
-
-This runs tests with `python -m pytest`, installs dependencies automatically, and writes Allure results to `allure-results/<priority>` or `allure-results/single`.
+This runs tests with `python -m pytest`, auto-starts Appium, and writes Allure results to `allure-results/<priority>` or `allure-results/single`. Default report: `allure serve`.
 
 ## Android Element Inspector
 
-Default tool: Appium Inspector plugin.
-
-Why this default:
-- It is maintained by the Appium project.
-- It runs from the same Appium server used by generated tests.
-- It displays screenshot and XML source side by side.
-- It supports element search by locator strategy.
-- It shows selected element attributes, suggested locators, and coordinate box model.
-- It can interact with controls by tapping, sending keys, and clearing text.
-
-The open command installs missing Appium dependencies automatically when `npm` is available, including the Android `uiautomator2` driver. It also detects Android SDK root from `adb`, sets `ANDROID_HOME` and `ANDROID_SDK_ROOT`, detects the connected device and foreground Android app, writes `capabilities.json`, and creates an Appium session automatically:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .cursor/skills/ui-auto-pytest-allure/scripts/open_android_inspector.ps1
-```
-
-Use `-NoInstall` only when you want to skip automatic installation:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .cursor/skills/ui-auto-pytest-allure/scripts/open_android_inspector.ps1 -NoInstall
-```
-
-Use `-NoAutoSession` only when you want to open Inspector without creating a session:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .cursor/skills/ui-auto-pytest-allure/scripts/open_android_inspector.ps1 -NoAutoSession
-```
-
-Manual install commands:
+Recommended:
 
 ```bash
-npm install -g appium
-
-# Appium 3
-appium plugin install inspector
-
-# Appium 2
-appium plugin install --source=npm appium-inspector-plugin@2025.7.3
-
-# Android driver
-appium driver install uiautomator2
+python uiatest.py inspect
 ```
+
+Opens Inspector once after creating a healthy Appium session. Attach to the printed session id in the Inspector UI.
+
+The bootstrap flow installs Appium plugins/drivers when needed, detects the connected device, writes **`capabilities.local.json`**, and starts Appium with the Inspector plugin.
 
 Manual startup:
 
 ```bash
 appium --use-plugins=inspector --allow-insecure=*:session_discovery
+python uiatest.py repair --open-inspector
 ```
 
 Then open:

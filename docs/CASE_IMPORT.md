@@ -92,10 +92,21 @@ pip install openpyxl
 
 ## 测试报告（HTML）
 
-跑完用例后 `run_ui_tests.py` 会默认把 `allure-results/` 里的 JSON 生成 HTML 并自动打开浏览器：
+跑完用例后默认使用 **`allure serve`** 在浏览器打开报告（不要用 `file://` 直接打开 `index.html`）。
 
-- 单条用例：`allure-report/single/index.html`
-- 按等级：`allure-report/P1/index.html`
+| 类型 | 路径 |
+|------|------|
+| 原始结果 | `allure-results/P1/` 或 `allure-results/single/` |
+| 在线报告 | 由 `allure serve` 自动打开 |
+| 静态副本（可选） | `allure-report/P1/`（需 `--static-report`） |
+
+运行示例：
+
+```powershell
+python uiatest.py run "运行P1测试用例"
+python uiatest.py run "运行P1测试用例" --fresh-results
+python uiatest.py run "运行P1测试用例" --static-report
+```
 
 安装 Python 依赖时会**自动完成**（无需手动配置）：
 

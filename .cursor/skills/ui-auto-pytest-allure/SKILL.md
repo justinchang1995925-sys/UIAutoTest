@@ -15,12 +15,38 @@ The user only needs to describe:
 - Steps such as tap, input, assert, sleep, and loop
 - Optional explicit locators (`id:...`, `xpath:...`) or visible control text
 
-**Do not require device tap recording.** Do not ask the user to click the device and reply `步骤N完成` unless they explicitly request legacy recording.
+Author cases in `.nl` files or CSV/Excel sheets — **not** by tapping the device to record.
 
 ## Default Stack
 
 - `pytest` + `allure-pytest` + `Appium-Python-Client` + `selenium`
-- `Appium Inspector` only for viewing elements when the user asks to open the element inspector plugin
+- `Appium Inspector` for viewing elements when the user asks to open the element inspector
+
+## Unified CLI (recommended)
+
+Project root entry point:
+
+```bash
+python uiatest.py --help
+python uiatest.py doctor
+python uiatest.py import cases/your_cases.csv
+python uiatest.py gen cases/your_case.nl
+python uiatest.py run "运行P1测试用例"
+python uiatest.py inspect
+python uiatest.py clean
+```
+
+| Subcommand | Purpose |
+|------------|---------|
+| `run` | Run by NL, `--priority`, or `--test` |
+| `import` | CSV/XLSX → `.nl` + spec + pytest |
+| `gen` | `.nl` → spec + pytest |
+| `doctor` | Preflight checks |
+| `clean` | Remove allure-results/report, logs |
+| `inspect` | Start Appium session + open Inspector once |
+| `repair` | Repair UiAutomator2 session |
+
+Long-form scripts under `.cursor/skills/ui-auto-pytest-allure/scripts/` still work; prefer `uiatest.py` for users.
 
 ## Primary Workflow: Natural Language → Generated Case
 
@@ -31,13 +57,13 @@ The user only needs to describe:
 3. Generate files with:
 
 ```bash
-python .cursor/skills/ui-auto-pytest-allure/scripts/create_case_from_nl.py cases/your_case.nl
+python uiatest.py gen cases/your_case.nl
 ```
 
 Or inline:
 
 ```bash
-python .cursor/skills/ui-auto-pytest-allure/scripts/create_case_from_nl.py --text "P1
+python uiatest.py gen cases/_inline.nl --text "P1
 用例名: demo
 标题: 演示用例
 步骤1: 点击 设置
@@ -47,23 +73,15 @@ python .cursor/skills/ui-auto-pytest-allure/scripts/create_case_from_nl.py --tex
 4. Outputs:
    - `specs/<priority>/<test_name>.json`
    - `generated-tests/ui/<priority>/test_<test_name>.py`
-   - `recording/live_spec.json` and `recording/live_test.py` for immediate review and edits
-5. If the user wants changes, edit `recording/live_spec.json` or ask in chat, then run:
+   - Shared fixtures: `generated-tests/ui/conftest.py`, `pytest.ini`
 
-```bash
-python .cursor/skills/ui-auto-pytest-allure/scripts/refresh_recording_preview.py
-python .cursor/skills/ui-auto-pytest-allure/scripts/create_case_from_nl.py cases/your_case.nl
-```
-
-6. Install Python dependencies automatically before running tests:
+5. Install Python dependencies automatically before running tests:
 
 ```bash
 python .cursor/skills/ui-auto-pytest-allure/scripts/install_ui_dependencies.py
 ```
 
-`create_case_from_nl.py` and `run_priority.py` call this installer by default.
-
-7. Run tests when the user says natural-language run commands:
+6. Run tests when the user says natural-language run commands:
 
 | User says | Action |
 |-----------|--------|
@@ -71,96 +89,52 @@ python .cursor/skills/ui-auto-pytest-allure/scripts/install_ui_dependencies.py
 | `运行test_setting_password_idle_lock.py` | Run one test file |
 
 ```bash
-python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py "运行P0测试用例"
-python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py "运行test_setting_password_idle_lock.py"
+python uiatest.py run "运行P0测试用例"
+python uiatest.py run --test test_setting_password_idle_lock.py
 ```
 
-Equivalent forms:
+When the user message matches a run command, run `uiatest.py run` (or `run_ui_tests.py`) immediately. Do not execute test files with plain `python`.
 
-```bash
-python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py --priority P0
-python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py --test test_setting_password_idle_lock.py
-```
-
-When the user message matches a run command, run `run_ui_tests.py` immediately. Do not execute test files with plain `python`.
-
-Before tests, `run_ui_tests.py` **auto-starts Appium** if needed and ensures a usable capabilities file exists.
+Before tests, the runner **auto-starts Appium** if needed and ensures a usable capabilities file exists.
 
 ### Device connection (USB or IP)
 
-Default behavior: if the user says `运行P1测试用例`, it runs against the current connected Android device (typically USB, but Wi‑Fi `adb` also works).
+Default: `运行P1测试用例` uses the current connected Android device.
 
-If the user says:
-
-- `连接设备 192.168.140.172:5555 并运行P1测试用例`
-
-Then `run_ui_tests.py` will:
-
-- Run `adb connect 192.168.140.172:5555`
-- Force `capabilities.local.json` to use `appium:udid=device_ip:port`
-- Start Appium and run tests
+If the user says `连接设备 192.168.140.172:5555 并运行P1测试用例`, the runner will `adb connect`, update `capabilities.local.json`, start Appium, and run tests.
 
 ### Capabilities files (template + local)
 
-Capabilities are loaded in this order:
+Load order:
 
 - `APPIUM_CAPABILITIES` env (JSON string)
 - `APPIUM_CAPABILITIES_FILE` env (path)
-- `capabilities.local.json` (local overrides, **ignored by git**)
-- `capabilities.json` (legacy)
+- `capabilities.local.json` (local overrides, **gitignored**)
+- `capabilities.json` (legacy placeholder in repo)
 - `capabilities.template.json` (committed template)
 
-`capabilities.local.json` is created automatically from `capabilities.template.json` on first run (when missing).
+`capabilities.local.json` is created from template on first run when missing. Inspector writes to **`capabilities.local.json`**, not the tracked file.
 
-After tests finish, it runs **`allure serve`** (local HTTP server) to open the report. Do not open `index.html` via `file://` or widgets stay on Loading. Use `--no-open-report` to skip.
+After tests finish, the runner uses **`allure serve`** (local HTTP). Use `--no-open-report` to skip. Static HTML copy: `--static-report`.
 
-Allure CLI is installed automatically into `.tools/allure-<version>/` by `install_ui_dependencies.py` (also sets Windows user `PATH` and `ALLURE_HOME`). Manual install:
-
-```bash
-python .cursor/skills/ui-auto-pytest-allure/scripts/install_allure_cli.py
-```
-
-**Never run a generated test file directly with `python test_xxx.py`.** Always use `pytest` so fixtures, markers, and Allure hooks work.
+**Never run a generated test file directly with `python test_xxx.py`.** Always use `pytest` or `uiatest run`.
 
 ### Failure attachments (Allure)
 
-On test failure, the generated `conftest.py` automatically attaches to Allure:
-
-- screenshot (PNG)
-- page source (XML)
-- current activity (when available)
-- logcat tail (prefers Appium `driver.get_log("logcat")`, falls back to `adb logcat`)
-
-Correct:
-
-```bash
-python -m pytest generated-tests/ui/P1 -m P1 --alluredir=allure-results/P1
-```
-
-Wrong:
-
-```bash
-python generated-tests/ui/P1/test_setting_password_idle_lock.py
-```
+On failure, `generated-tests/ui/conftest.py` attaches screenshot, page source, activity, logcat, optional screenrecord.
 
 ## Batch Import from Excel / 飞书云表格
 
-Table headers (required): **用例等级、用例名、功能模块、子模块、操作步骤**  
-Recommended: **预期结果** — one line per step; merged into `，期望出现 …` / `，期望开关关闭` etc. for post-step assertions in generated code.
-
-1. Create the sheet in Excel or Feishu (multi-line steps in one cell).
-2. Export as `.csv` or `.xlsx`.
-3. Import:
+Required headers: **用例等级、用例名、功能模块、子模块、操作步骤**  
+Recommended: **预期结果** (per-step post assertions).
 
 ```bash
-python .cursor/skills/ui-auto-pytest-allure/scripts/import_cases_from_sheet.py cases/your_cases.csv
+python uiatest.py import cases/your_cases.csv
 ```
 
-See [docs/CASE_IMPORT.md](../../../docs/CASE_IMPORT.md) and template `cases/import_template.csv`.
+See [docs/CASE_IMPORT.md](../../../docs/CASE_IMPORT.md) and `cases/import_template.csv`.
 
 ## Natural Language Format
-
-Supported lines:
 
 ```text
 P1
@@ -172,85 +146,37 @@ P1
 步骤2: 点击 id:com.example:id/login
 步骤3: 输入 账号, demo_user
 步骤4: 断言 首页 可见
-步骤5: 断言文字 提示, 保存成功
 循环步骤1-2 2次
 等待 2秒
 ```
 
-Supported step verbs: `点击` / `设置开关` / `打开开关` / `关闭开关` / `输入` / `断言` / `断言文字` / `等待` / `循环步骤`
-
 ### Locator resolve (id-first + text fallback)
 
-Natural language stays the same. When generating cases (`create_case_from_nl.py`), if an Android device is connected:
+When generating (`gen` / `import`), if a device is connected:
 
-- Plain text like `步骤2: 点击 密码与安全` is dumped from the current UI tree
-- If a matching `resource-id` is found, the spec uses **id as primary** and keeps **text in `locators_fallback`**
-- At runtime (`ui_runtime.py`), locators are tried in order: primary → fallbacks
+- Plain text steps are dumped from the UI tree
+- Matching `resource-id` becomes primary; text kept in `locators_fallback`
+- Runtime tries primary → fallbacks
 
-Generate with resolve (default when adb device is available):
-
-```bash
-python .cursor/skills/ui-auto-pytest-allure/scripts/create_case_from_nl.py cases/your_case.nl
-```
-
-Skip resolve (text-only, as before):
-
-```bash
-python .cursor/skills/ui-auto-pytest-allure/scripts/create_case_from_nl.py cases/your_case.nl --no-resolve-locators
-```
-
-Optional post-step expectation in NL (unchanged syntax):
-
-```text
-步骤2: 点击 密码与安全，期望出现 电机锁
-```
-
-Switch state example:
-
-```text
-步骤4: 设置开关 空闲时锁电机 打开
-步骤4: 设置开关 空闲时锁电机 关闭
-步骤4: 打开开关 空闲时锁电机
-```
+Skip resolve: `--no-resolve-locators`
 
 ## Android Element Inspector
 
-When the user says `打开界面控件元素插件` or `打开页面元素插件`:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .cursor/skills/ui-auto-pytest-allure/scripts/open_android_inspector.ps1
-```
-
-Use Inspector only to **look up locators** when the user needs `id` or `xpath`. Put those locators into the natural-language case or `live_spec.json`.
-
-If Inspector **Refresh Source & Screenshot** fails with `instrumentation process is not running`:
-
-1. Do **not** keep refreshing the old Inspector tab. That session is already dead.
-2. Repair and create a fresh healthy session:
+When the user asks to open the element inspector:
 
 ```bash
-python .cursor/skills/ui-auto-pytest-allure/scripts/repair_appium_session.py --open-inspector
+python uiatest.py inspect
 ```
 
-PowerShell equivalent:
+Opens Inspector **once** after a healthy Appium session is created. In Inspector: **Attach to Session** with the printed session id.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .cursor/skills/ui-auto-pytest-allure/scripts/repair_appium_inspector.ps1 -OpenInspector
+If refresh fails with instrumentation errors:
+
+```bash
+python uiatest.py repair --open-inspector
 ```
 
-3. In Inspector choose **Attach to Session** and select the new `session_id` printed by the repair script (also saved in `.appium-inspector-session.json`).
-4. Then click **Refresh Source & Screenshot**.
-
-`run_ui_tests.py` now auto-repairs after each test run so Inspector is ready for locator lookup.
-
-## Legacy Recording (Optional)
-
-Only use tap recording if the user explicitly asks to record by clicking the device:
-
-- `scripts/record_ui_case.py`
-- `scripts/record_step_done.py`
-
-Otherwise, always prefer `create_case_from_nl.py`.
+Do not refresh dead Inspector tabs. `run_ui_tests.py` auto-repairs after test runs when Inspector may be used next.
 
 ## Supported Actions
 
@@ -258,15 +184,14 @@ Otherwise, always prefer `create_case_from_nl.py`.
 
 ## Dependencies
 
-Required packages: `pytest`, `allure-pytest`, `Appium-Python-Client`, `selenium`.
+Required: `pytest`, `allure-pytest`, `Appium-Python-Client`, `selenium`.
 
-If the user reports `ModuleNotFoundError: No module named 'allure'` or missing `pytest`, run:
+If imports fail, run:
 
 ```bash
+python uiatest.py doctor
 python .cursor/skills/ui-auto-pytest-allure/scripts/install_ui_dependencies.py
 ```
-
-Then run tests with pytest, not by executing the test file directly.
 
 ## Examples
 

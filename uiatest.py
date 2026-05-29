@@ -31,6 +31,11 @@ def main() -> None:
     run_p.add_argument("--device", help="udid or ip[:port]")
     run_p.add_argument("--skip-install", action="store_true")
     run_p.add_argument("--skip-repair", action="store_true")
+    run_p.add_argument(
+        "--auto-repair",
+        action="store_true",
+        help="Repair Appium session after tests (for Inspector).",
+    )
     run_p.add_argument("--skip-appium-start", action="store_true")
     run_p.add_argument("--no-open-report", action="store_true")
     run_p.add_argument(
@@ -56,11 +61,11 @@ def main() -> None:
     imp_p.add_argument("--udid", help="Device id for locator resolve.")
 
     gen_p = sub.add_parser("gen", help="Generate case from .nl.")
-    gen_p.add_argument("path", help=".nl file path")
+    gen_p.add_argument("path", nargs="?", help=".nl file path (optional if --text is given)")
     gen_p.add_argument("--spec-root", default="specs")
     gen_p.add_argument("--output-root", default="generated-tests/ui")
     gen_p.add_argument("--skip-install", action="store_true")
-    gen_p.add_argument("--no-preview", action="store_true")
+    gen_p.add_argument("--text", help="Natural-language case text inline.")
     gen_p.add_argument("--no-resolve-locators", action="store_true")
     gen_p.add_argument("--udid", help="Device id for locator resolve.")
 
@@ -102,6 +107,8 @@ def main() -> None:
             forward += ["--skip-install"]
         if args.skip_repair:
             forward += ["--skip-repair"]
+        if args.auto_repair:
+            forward += ["--auto-repair"]
         if args.skip_appium_start:
             forward += ["--skip-appium-start"]
         if args.no_open_report:
@@ -130,11 +137,16 @@ def main() -> None:
         raise SystemExit(_run("import_cases_from_sheet.py", forward))
 
     if args.cmd == "gen":
-        forward = [args.path, "--spec-root", args.spec_root, "--output-root", args.output_root]
+        if not args.path and not args.text:
+            raise SystemExit("Provide a .nl path or --text.")
+        forward: list[str] = []
+        if args.path:
+            forward.append(args.path)
+        forward += ["--spec-root", args.spec_root, "--output-root", args.output_root]
         if args.skip_install:
             forward.append("--skip-install")
-        if args.no_preview:
-            forward.append("--no-preview")
+        if args.text:
+            forward += ["--text", args.text]
         if args.no_resolve_locators:
             forward.append("--no-resolve-locators")
         if args.udid:

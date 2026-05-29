@@ -14,7 +14,6 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 from generate_ui_test import validate_spec, write_outputs  # noqa: E402
 from nl_case_parser import parse_natural_language_case  # noqa: E402
-from recording_preview import update_live_preview, print_live_preview  # noqa: E402
 from resolve_locators import resolve_spec_locators  # noqa: E402
 
 
@@ -24,7 +23,6 @@ def main() -> None:
     parser.add_argument("--text", help="Natural-language case text inline.")
     parser.add_argument("--spec-root", default="specs", help="Directory for JSON specs.")
     parser.add_argument("--output-root", default="generated-tests/ui", help="Directory for pytest files.")
-    parser.add_argument("--no-preview", action="store_true", help="Skip writing recording/live_* preview files.")
     parser.add_argument("--skip-install", action="store_true", help="Skip automatic pip install.")
     parser.add_argument(
         "--no-resolve-locators",
@@ -60,19 +58,6 @@ def main() -> None:
     output_dir = Path(args.output_root) / priority
     test_path = write_outputs(spec, output_dir)
 
-    session = {
-        "suite": spec["suite"],
-        "feature": spec["feature"],
-        "title": spec["title"],
-        "test_name": spec["test_name"],
-        "priority": priority,
-        "description": spec["description"],
-        "steps": spec["steps"],
-    }
-    if not args.no_preview:
-        update_live_preview(session)
-        print_live_preview(session)
-
     if not args.skip_install:
         installer = SCRIPT_DIR / "install_ui_dependencies.py"
         print("Installing UI test dependencies...")
@@ -80,9 +65,8 @@ def main() -> None:
 
     print(f"已生成规格：{spec_path}")
     print(f"已生成脚本：{test_path}")
-    print("运行测试请使用 pytest，不要直接用 python 执行测试文件：")
-    print(f"  python -m pytest {output_dir} -m {priority} --alluredir=allure-results/{priority}")
-    print(f"或：python uiatest.py run --priority {priority}")
+    print("运行测试：")
+    print(f"  python uiatest.py run --priority {priority}")
 
 
 if __name__ == "__main__":

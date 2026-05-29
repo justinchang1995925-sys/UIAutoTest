@@ -65,7 +65,7 @@ adb devices
 
 首次运行测试时，若没有 `capabilities.local.json`，会从 `capabilities.template.json` 自动生成一份（本地文件，不提交 Git）。
 
-加载优先级：`APPIUM_CAPABILITIES` 环境变量 → `capabilities.local.json` → `capabilities.template.json`。
+加载优先级：`APPIUM_CAPABILITIES` 环境变量 → `capabilities.local.json` → `capabilities.json`（legacy 占位）→ `capabilities.template.json`。
 
 ---
 
@@ -198,7 +198,12 @@ python uiatest.py run "运行P1测试用例" --fresh-results
 
 # 除 allure serve 外，再生成静态 allure-report/ 副本
 python uiatest.py run "运行P1测试用例" --static-report
+
+# 需要跑完后自动 repair / 打开 Inspector 时（默认关闭，可省约 20s）
+python uiatest.py run --priority P1 --auto-repair
 ```
+
+依赖与 Allure CLI 已就绪时会**自动跳过 pip install**；日常回归建议不加 `--auto-repair`。
 
 ### 4.3 参数形式（等价）
 
@@ -226,8 +231,13 @@ python .../run_ui_tests.py "运行P1测试用例" --no-open-report
 
 | 变量 | 说明 |
 |------|------|
-| `UIATEST_STRICT_WARMUP=1` | 应用启动预热失败时直接失败（默认仅警告） |
-| `UIATEST_SKIP_WARMUP=1` | 跳过启动预热 |
+| `UIATEST_STEP_SETTLE_SEC` | 点击/输入/开关操作后等待 UI 稳定秒数（默认 `0.5`） |
+| `UIATEST_POST_ASSERT_TIMEOUT` | 每步「预期结果」断言超时上限（默认 `8`，不超过步骤 timeout） |
+| `UIATEST_APP_STARTUP_SEC` | driver 启动后等待 App 就绪秒数（默认 `0.5`） |
+| `UIATEST_WARMUP=1` | 执行前预热等待首步元素可见（默认关闭，避免与第 1 步重复等待） |
+| `UIATEST_STRICT_WARMUP=1` | 预热失败时直接失败 |
+| `UIATEST_AUTO_REPAIR=1` / `--auto-repair` | 跑完后 repair Appium（默认关闭，省 ~20s） |
+| `APPIUM_SKIP_U2_REPAIR=1` | teardown 时跳过 UiAutomator2 force-stop（快跑时可选） |
 | `UIATEST_ALLURE_STATIC=1` | 等同 `--static-report` |
 | `ANDROID_SERIAL` | 指定 adb 设备（多设备时） |
 | `UIATEST_SCREENRECORD_ON_FAIL=1` | 失败时 adb 录屏并附加到 Allure |

@@ -45,6 +45,7 @@ UIAutoTest/
 ├── cases/import_template.csv # 表格导入模板
 ├── specs/                    # JSON 用例规格
 ├── generated-tests/ui/       # 生成的 pytest 脚本
+│   ├── conftest.py           # 共享 Appium fixture（所有优先级共用）
 │   └── P1/
 ├── allure-results/           # 测试原始结果（JSON，可删）
 ├── allure-report/            # HTML 报告（自动生成）
@@ -58,18 +59,18 @@ UIAutoTest/
 
 ## 快速开始
 
-### 1. 启动 Appium 并打开 Inspector（查元素）
+### 1. 打开 Appium Inspector（查元素）
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .cursor/skills/ui-auto-pytest-allure/scripts/open_android_inspector.ps1
+python uiatest.py inspect
 ```
 
-在 Inspector 中查看控件的 `resource-id`，写入用例。
+会自动启动 Appium、创建 session，并**只打开一次** Inspector。在浏览器中选择 **Attach to Session** 附着到输出的 session id。
 
-若刷新失败：
+若会话失效：
 
 ```powershell
-python .cursor/skills/ui-auto-pytest-allure/scripts/repair_appium_session.py --open-inspector
+python uiatest.py repair --open-inspector
 ```
 
 ### 2. 编写用例（自然语言）

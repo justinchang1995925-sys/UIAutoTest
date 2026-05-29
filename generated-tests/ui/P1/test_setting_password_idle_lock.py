@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from _lib.ui_runtime import run_steps  # noqa: E402
 
 
-DEFAULT_TIMEOUT = 10
+DEFAULT_TIMEOUT = 15
 
 STEPS = [
     {
@@ -27,8 +27,13 @@ STEPS = [
             "id": "com.pudutech.business.function:id/tvSettings"
         },
         "expect_visible": {
-            "android_uiautomator": "new UiSelector().text(\"密码与安全\")"
-        }
+            "android_uiautomator": "new UiSelector().resourceId(\"com.pudutech.business.function:id/tv_name\").text(\"密码与安全\")"
+        },
+        "expect_visible_locators_fallback": [
+            {
+                "android_uiautomator": "new UiSelector().text(\"密码与安全\")"
+            }
+        ]
     },
     {
         "name": "Step 2 Tap 密码与安全",
@@ -37,11 +42,16 @@ STEPS = [
             "android_uiautomator": "new UiSelector().resourceId(\"com.pudutech.business.function:id/tv_name\").text(\"密码与安全\")"
         },
         "expect_visible": {
-            "android_uiautomator": "new UiSelector().text(\"电机锁\")"
+            "id": "com.pudutech.business.function:id/tv_motorLockTab"
         },
         "locators_fallback": [
             {
                 "android_uiautomator": "new UiSelector().text(\"密码与安全\")"
+            }
+        ],
+        "expect_visible_locators_fallback": [
+            {
+                "android_uiautomator": "new UiSelector().text(\"电机锁\")"
             }
         ]
     },

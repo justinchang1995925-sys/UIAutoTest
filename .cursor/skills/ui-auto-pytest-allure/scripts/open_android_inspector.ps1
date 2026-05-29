@@ -335,7 +335,7 @@ function New-AndroidCapabilities {
 function Save-Capabilities {
     param([object]$Capabilities)
 
-    $capabilitiesPath = Join-Path (Get-Location) "capabilities.json"
+    $capabilitiesPath = Join-Path (Get-Location) "capabilities.local.json"
     $json = $Capabilities | ConvertTo-Json -Depth 10
     [System.IO.File]::WriteAllText($capabilitiesPath, $json, [System.Text.UTF8Encoding]::new($false))
     Write-Host "Generated capabilities: $capabilitiesPath"
@@ -450,7 +450,7 @@ function New-AppiumSession {
         } else {
             Write-Host "Could not auto-create Appium session: $($_.Exception.Message)"
         }
-        Write-Host "The generated capabilities.json can still be used by Inspector."
+        Write-Host "The generated capabilities.local.json can still be used by Inspector."
         return $null
     }
 }

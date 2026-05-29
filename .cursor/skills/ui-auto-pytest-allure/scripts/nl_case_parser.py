@@ -330,6 +330,7 @@ def parse_natural_language_case(text: str) -> dict[str, Any]:
         "test_name": slugify(meta["test_name"]),
         "title": meta["title"],
         "priority": meta["priority"].upper(),
+        "timeout": 15,
         "description": meta.get("description") or f"Generated from natural language: {meta['title']}",
         "steps": steps,
     }
