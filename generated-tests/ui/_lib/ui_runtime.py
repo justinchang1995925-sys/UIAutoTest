@@ -11,6 +11,8 @@ from selenium.webdriver.common.actions.pointer_input import PointerInput
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
+from _lib.locator_chain import field_locators, step_locators
+
 
 def by(locator: dict[str, Any]):
     key, value = next(iter(locator.items()))
@@ -44,6 +46,56 @@ def wait_clickable(driver, locator: dict[str, Any], timeout: int):
     if _by is None:
         raise ValueError("Coordinate locator cannot be used to find an element.")
     return WebDriverWait(driver, timeout).until(EC.element_to_be_clickable(_by))
+
+
+def wait_visible_chain(driver, locators: list[dict[str, Any]], timeout: int):
+    if not locators:
+        raise ValueError("No locators provided.")
+    if len(locators) == 1:
+        return wait_visible(driver, locators[0], timeout)
+
+    per_try = max(2, timeout // len(locators))
+    last_error: Exception | None = None
+    for locator in locators:
+        try:
+            element = wait_visible(driver, locator, per_try)
+            allure.attach(
+                str(locator),
+                name="locator_used_visible",
+                attachment_type=allure.attachment_type.TEXT,
+            )
+            return element
+        except TimeoutException as exc:
+            last_error = exc
+    raise TimeoutException(
+        f"None of the locators became visible within {timeout}s: {locators}"
+    ) from last_error
+
+
+def wait_clickable_chain(driver, locators: list[dict[str, Any]], timeout: int):
+    if not locators:
+        raise ValueError("No locators provided.")
+    if len(locators) == 1:
+        return wait_clickable(driver, locators[0], timeout)
+
+    per_try = max(2, timeout // len(locators))
+    last_error: Exception | None = None
+    for locator in locators:
+        if "coordinates" in locator:
+            return locator
+        try:
+            element = wait_clickable(driver, locator, per_try)
+            allure.attach(
+                str(locator),
+                name="locator_used_clickable",
+                attachment_type=allure.attachment_type.TEXT,
+            )
+            return element
+        except TimeoutException as exc:
+            last_error = exc
+    raise TimeoutException(
+        f"None of the locators became clickable within {timeout}s: {locators}"
+    ) from last_error
 
 
 def tap_coordinates(driver, x: int, y: int):
@@ -91,8 +143,8 @@ def find_switch_near_label(label_element):
     return None
 
 
-def set_switch_state(driver, locator: dict[str, Any], desired_on: bool, timeout: int):
-    label = wait_visible(driver, locator, timeout)
+def set_switch_state(driver, locators: list[dict[str, Any]], desired_on: bool, timeout: int):
+    label = wait_visible_chain(driver, locators, timeout)
     switch = find_switch_near_label(label) or label
     if element_is_checked(switch) != desired_on:
         switch.click()
@@ -100,21 +152,26 @@ def set_switch_state(driver, locator: dict[str, Any], desired_on: bool, timeout:
     expected = "on" if desired_on else "off"
     actual = "on" if final_on else "off"
     assert final_on == desired_on, (
-        f"Switch state mismatch for {locator}: expected {expected}, got {actual}"
+        f"Switch state mismatch for {locators}: expected {expected}, got {actual}"
     )
 
 
 def post_assert(driver, step: dict[str, Any], timeout: int):
     expect_visible = step.get("expect_visible")
     if isinstance(expect_visible, dict):
-        wait_visible(driver, expect_visible, timeout)
+        wait_visible_chain(driver, field_locators(step, "expect_visible"), timeout)
     expect_not_visible = step.get("expect_not_visible")
     if isinstance(expect_not_visible, dict):
-        _by = by(expect_not_visible)
-        try:
-            WebDriverWait(driver, timeout).until_not(EC.visibility_of_element_located(_by))
-        except TimeoutException as exc:
-            raise AssertionError(f"Element is still visible: {expect_not_visible}") from exc
+        locators = field_locators(step, "expect_not_visible")
+        for locator in locators:
+            _by = by(locator)
+            try:
+                WebDriverWait(driver, timeout).until_not(EC.visibility_of_element_located(_by))
+                break
+            except TimeoutException:
+                continue
+        else:
+            raise AssertionError(f"Element is still visible: {expect_not_visible}")
     expect_activity = step.get("expect_activity")
     if isinstance(expect_activity, str) and expect_activity.strip():
         try:
@@ -129,20 +186,20 @@ def post_assert(driver, step: dict[str, Any], timeout: int):
 def run_step(driver, step: dict[str, Any], default_timeout: int):
     action = step["action"]
     timeout = int(step.get("timeout", default_timeout))
-    locator = step.get("locator")
+    locators = step_locators(step)
 
     if action in {"tap", "click"}:
-        if locator and "coordinates" in locator:
-            point = locator["coordinates"]
+        if locators and "coordinates" in locators[0]:
+            point = locators[0]["coordinates"]
             tap_coordinates(driver, int(point["x"]), int(point["y"]))
             post_assert(driver, step, timeout)
             return
-        wait_clickable(driver, locator, timeout).click()
+        wait_clickable_chain(driver, locators, timeout).click()
         post_assert(driver, step, timeout)
         return
 
     if action in {"input", "set_text"}:
-        element = wait_visible(driver, locator, timeout)
+        element = wait_visible_chain(driver, locators, timeout)
         if step.get("clear", True):
             element.clear()
         element.send_keys(str(step["value"]))
@@ -151,24 +208,26 @@ def run_step(driver, step: dict[str, Any], default_timeout: int):
 
     if action == "set_switch":
         desired_on = str(step.get("state", "")).lower() == "on"
-        set_switch_state(driver, locator, desired_on, timeout)
+        set_switch_state(driver, locators, desired_on, timeout)
         post_assert(driver, step, timeout)
         return
 
     if action == "assert_visible":
-        wait_visible(driver, locator, timeout)
+        wait_visible_chain(driver, locators, timeout)
         return
 
     if action == "assert_not_visible":
-        _by = by(locator)
-        try:
-            WebDriverWait(driver, timeout).until_not(EC.visibility_of_element_located(_by))
-        except TimeoutException as exc:
-            raise AssertionError(f"Element is still visible: {locator}") from exc
-        return
+        for locator in locators:
+            _by = by(locator)
+            try:
+                WebDriverWait(driver, timeout).until_not(EC.visibility_of_element_located(_by))
+                return
+            except TimeoutException:
+                continue
+        raise AssertionError(f"Element is still visible: {locators}")
 
     if action == "assert_text":
-        element = wait_visible(driver, locator, timeout)
+        element = wait_visible_chain(driver, locators, timeout)
         actual = element.text or element.get_attribute("text") or ""
         expected = str(step["value"])
         if step.get("contains", True):
@@ -178,7 +237,7 @@ def run_step(driver, step: dict[str, Any], default_timeout: int):
         return
 
     if action == "wait_visible":
-        wait_visible(driver, locator, timeout)
+        wait_visible_chain(driver, locators, timeout)
         return
 
     if action == "sleep":
@@ -196,16 +255,14 @@ def run_step(driver, step: dict[str, Any], default_timeout: int):
 
 
 def run_steps(driver, steps: list[dict[str, Any]], default_timeout: int):
-    # Preflight: wait for the first real step target to appear.
     for first in steps:
         if first.get("action") == "loop":
             continue
-        locator = first.get("locator")
-        if isinstance(locator, dict) and "coordinates" not in locator:
+        locators = step_locators(first)
+        if locators and "coordinates" not in locators[0]:
             try:
-                wait_visible(driver, locator, int(first.get("timeout", default_timeout)))
+                wait_visible_chain(driver, locators, int(first.get("timeout", default_timeout)))
             except TimeoutException:
-                # Do not fail early; some apps require extra time or a prior navigation.
                 pass
         break
 
@@ -222,4 +279,3 @@ def run_steps(driver, steps: list[dict[str, Any]], default_timeout: int):
 
         with allure.step(step.get("name", step["action"])):
             run_step(driver, step, default_timeout)
-

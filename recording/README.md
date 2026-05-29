@@ -1,6 +1,6 @@
 # 录制预览（实时更新）
 
-- 更新时间: 2026-05-26 17:52:05
+- 更新时间: 2026-05-29 10:36:25
 - 用例名称: `setting_password_idle_lock`
 - 用例等级: `P1`
 - 已录制步骤: 4
@@ -42,14 +42,19 @@ driver.find_element(..., "com.pudutech.business.function:id/tvSettings").click()
   "name": "Step 2 Tap 密码与安全",
   "action": "tap",
   "locator": {
-    "android_uiautomator": "new UiSelector().text(\"密码与安全\")"
-  }
+    "android_uiautomator": "new UiSelector().resourceId(\"com.pudutech.business.function:id/tv_name\").text(\"密码与安全\")"
+  },
+  "locators_fallback": [
+    {
+      "android_uiautomator": "new UiSelector().text(\"密码与安全\")"
+    }
+  ]
 }
 ```
 
 ```python
 # Step 2: Step 2 Tap 密码与安全
-driver.find_element(..., "new UiSelector().text("密码与安全")").click()  # android_uiautomator
+driver.find_element(..., "new UiSelector().resourceId("com.pudutech.business.function:id/tv_name").text("密码与安全")").click()  # android_uiautomator
 ```
 
 ### 步骤 3: Step 3 Tap 电机锁
@@ -59,14 +64,19 @@ driver.find_element(..., "new UiSelector().text("密码与安全")").click()  # 
   "name": "Step 3 Tap 电机锁",
   "action": "tap",
   "locator": {
-    "android_uiautomator": "new UiSelector().text(\"电机锁\")"
-  }
+    "id": "com.pudutech.business.function:id/tv_motorLockTab"
+  },
+  "locators_fallback": [
+    {
+      "android_uiautomator": "new UiSelector().text(\"电机锁\")"
+    }
+  ]
 }
 ```
 
 ```python
 # Step 3: Step 3 Tap 电机锁
-driver.find_element(..., "new UiSelector().text("电机锁")").click()  # android_uiautomator
+driver.find_element(..., "com.pudutech.business.function:id/tv_motorLockTab").click()  # id
 ```
 
 ### 步骤 4: Step 4 set switch id:com.pudutech.business.function:id/idle_lock_switch 关闭

@@ -99,11 +99,26 @@ def dump_ui_xml(udid: str) -> ET.Element:
     if dump_result.returncode != 0:
         raise RuntimeError(f"Could not dump UI XML: {dump_result.stderr or dump_result.stdout}")
 
-    cat_result = run_adb(["shell", "cat", remote_path], udid=udid, timeout=20)
-    if cat_result.returncode != 0 or not cat_result.stdout.strip():
-        raise RuntimeError(f"Could not read UI XML: {cat_result.stderr or cat_result.stdout}")
+    command = ["adb"]
+    if udid:
+        command.extend(["-s", udid])
+    command.extend(["exec-out", "cat", remote_path])
+    exec_result = subprocess.run(
+        command,
+        capture_output=True,
+        timeout=20,
+        check=False,
+    )
+    if exec_result.returncode == 0 and exec_result.stdout.strip():
+        xml_text = exec_result.stdout.decode("utf-8", errors="replace").strip()
+    else:
+        cat_result = run_adb(["shell", "cat", remote_path], udid=udid, timeout=20)
+        if cat_result.returncode != 0 or not cat_result.stdout.strip():
+            raise RuntimeError(f"Could not read UI XML: {cat_result.stderr or cat_result.stdout}")
+        xml_text = cat_result.stdout.strip()
 
-    xml_text = cat_result.stdout.strip()
+    if xml_text.startswith("\ufeff"):
+        xml_text = xml_text[1:]
     return ET.fromstring(xml_text)
 
 

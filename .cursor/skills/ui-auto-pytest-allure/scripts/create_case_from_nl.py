@@ -15,6 +15,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 from generate_ui_test import validate_spec, write_outputs  # noqa: E402
 from nl_case_parser import parse_natural_language_case  # noqa: E402
 from recording_preview import update_live_preview, print_live_preview  # noqa: E402
+from resolve_locators import resolve_spec_locators  # noqa: E402
 
 
 def main() -> None:
@@ -25,6 +26,12 @@ def main() -> None:
     parser.add_argument("--output-root", default="generated-tests/ui", help="Directory for pytest files.")
     parser.add_argument("--no-preview", action="store_true", help="Skip writing recording/live_* preview files.")
     parser.add_argument("--skip-install", action="store_true", help="Skip automatic pip install.")
+    parser.add_argument(
+        "--no-resolve-locators",
+        action="store_true",
+        help="Do not dump UI on device to resolve text locators to id (default: resolve when adb device is connected).",
+    )
+    parser.add_argument("--udid", help="Android device id for locator resolve (default: first connected device).")
     args = parser.parse_args()
 
     if args.text:
@@ -35,6 +42,14 @@ def main() -> None:
         raise SystemExit("Provide a case file path or --text.")
 
     spec = parse_natural_language_case(content)
+
+    if not args.no_resolve_locators:
+        upgraded = resolve_spec_locators(spec, udid=args.udid)
+        if upgraded:
+            print(f"Resolved {upgraded} step(s) to id-first locators (text kept as fallback).")
+        else:
+            print("Locator resolve: no text steps upgraded (device/UI dump may be unavailable).")
+
     validate_spec(spec)
 
     priority = spec["priority"]

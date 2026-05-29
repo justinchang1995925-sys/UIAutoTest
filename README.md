@@ -166,11 +166,18 @@ allure serve allure-results/P1
 
 首次运行时，如果没有 `capabilities.local.json`，会从 `capabilities.template.json` 自动生成一份。
 
+### 7. 定位策略（id 优先 + text 兜底）
+
+- **生成用例时**（设备已连接且 App 在对应页面）：`create_case_from_nl.py` 会 dump UI，把纯文字步骤尽量解析成 `id`，并保留 `locators_fallback` 里的 text。
+- **运行时**：按 `locator` → `locators_fallback` 顺序依次尝试，失败会换下一个。
+- 生成时跳过解析：`--no-resolve-locators`
+
 ## 用例步骤语法（摘要）
 
 | 操作 | 示例 |
 |------|------|
 | 点击 | `步骤1: 点击 设置` / `步骤1: 点击 id:com.xxx:id/btn` |
+| 点击后期望 | `步骤2: 点击 密码与安全，期望出现 电机锁` |
 | 设置开关 | `步骤4: 设置开关 id:com.xxx:id/switch 关闭` |
 | 输入 | `步骤2: 输入 账号, demo_user` |
 | 断言可见 | `步骤3: 断言 首页 可见` |

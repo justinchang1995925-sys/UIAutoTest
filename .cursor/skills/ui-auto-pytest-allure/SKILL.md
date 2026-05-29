@@ -178,6 +178,32 @@ P1
 
 Supported step verbs: `点击` / `设置开关` / `打开开关` / `关闭开关` / `输入` / `断言` / `断言文字` / `等待` / `循环步骤`
 
+### Locator resolve (id-first + text fallback)
+
+Natural language stays the same. When generating cases (`create_case_from_nl.py`), if an Android device is connected:
+
+- Plain text like `步骤2: 点击 密码与安全` is dumped from the current UI tree
+- If a matching `resource-id` is found, the spec uses **id as primary** and keeps **text in `locators_fallback`**
+- At runtime (`ui_runtime.py`), locators are tried in order: primary → fallbacks
+
+Generate with resolve (default when adb device is available):
+
+```bash
+python .cursor/skills/ui-auto-pytest-allure/scripts/create_case_from_nl.py cases/your_case.nl
+```
+
+Skip resolve (text-only, as before):
+
+```bash
+python .cursor/skills/ui-auto-pytest-allure/scripts/create_case_from_nl.py cases/your_case.nl --no-resolve-locators
+```
+
+Optional post-step expectation in NL (unchanged syntax):
+
+```text
+步骤2: 点击 密码与安全，期望出现 电机锁
+```
+
 Switch state example:
 
 ```text

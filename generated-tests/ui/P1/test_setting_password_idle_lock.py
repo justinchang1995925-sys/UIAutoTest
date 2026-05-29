@@ -11,6 +11,7 @@ from pathlib import Path
 import allure
 import pytest
 
+# Ensure generated-tests/ui is on sys.path so we can import shared helpers.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from _lib.ui_runtime import run_steps  # noqa: E402
@@ -30,15 +31,25 @@ STEPS = [
         "name": "Step 2 Tap 密码与安全",
         "action": "tap",
         "locator": {
-            "android_uiautomator": "new UiSelector().text(\"密码与安全\")"
-        }
+            "android_uiautomator": "new UiSelector().resourceId(\"com.pudutech.business.function:id/tv_name\").text(\"密码与安全\")"
+        },
+        "locators_fallback": [
+            {
+                "android_uiautomator": "new UiSelector().text(\"密码与安全\")"
+            }
+        ]
     },
     {
         "name": "Step 3 Tap 电机锁",
         "action": "tap",
         "locator": {
-            "android_uiautomator": "new UiSelector().text(\"电机锁\")"
-        }
+            "id": "com.pudutech.business.function:id/tv_motorLockTab"
+        },
+        "locators_fallback": [
+            {
+                "android_uiautomator": "new UiSelector().text(\"电机锁\")"
+            }
+        ]
     },
     {
         "name": "Step 4 set switch id:com.pudutech.business.function:id/idle_lock_switch 关闭",

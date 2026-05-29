@@ -99,6 +99,21 @@ def validate_spec(spec: dict[str, Any]) -> None:
             supported = ", ".join(sorted(SUPPORTED_LOCATORS))
             raise SystemExit(f"Step {index} has unsupported locator '{key}'. Supported: {supported}")
 
+        fallbacks = step.get("locators_fallback")
+        if fallbacks is not None:
+            if not isinstance(fallbacks, list):
+                raise SystemExit(f"Step {index} locators_fallback must be a list.")
+            for fb_index, fb in enumerate(fallbacks, start=1):
+                if not isinstance(fb, dict) or len(fb) != 1:
+                    raise SystemExit(
+                        f"Step {index} locators_fallback[{fb_index}] must be a single-key locator object."
+                    )
+                fb_key = next(iter(fb))
+                if fb_key not in SUPPORTED_LOCATORS:
+                    raise SystemExit(
+                        f"Step {index} locators_fallback[{fb_index}] has unsupported locator '{fb_key}'."
+                    )
+
         if action in {"input", "set_text", "assert_text"} and "value" not in step:
             raise SystemExit(f"Step {index} action '{action}' requires 'value'.")
 

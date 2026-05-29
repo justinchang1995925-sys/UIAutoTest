@@ -19,6 +19,7 @@ PROJECT_ROOT = resolve_project_root(SCRIPT_DIR)
 
 from generate_ui_test import validate_spec, write_outputs  # noqa: E402
 from nl_case_parser import parse_natural_language_case  # noqa: E402
+from resolve_locators import resolve_spec_locators  # noqa: E402
 from sheet_case_parser import rows_to_nl_cases  # noqa: E402
 
 
@@ -80,8 +81,12 @@ def _generate_from_nl(
     spec_root: Path,
     output_root: Path,
     skip_install: bool,
+    resolve_locators: bool = True,
+    udid: str | None = None,
 ) -> tuple[Path, Path]:
     spec = parse_natural_language_case(nl_text)
+    if resolve_locators:
+        resolve_spec_locators(spec, udid=udid)
     validate_spec(spec)
 
     priority = spec["priority"]
@@ -127,6 +132,12 @@ def main() -> None:
         help="Parse and print results without writing files.",
     )
     parser.add_argument("--skip-install", action="store_true")
+    parser.add_argument(
+        "--no-resolve-locators",
+        action="store_true",
+        help="Skip adb UI dump to resolve text locators to id.",
+    )
+    parser.add_argument("--udid", help="Device id for locator resolve.")
     args = parser.parse_args()
 
     sheet_path = args.sheet.resolve()
@@ -158,6 +169,8 @@ def main() -> None:
             args.spec_root,
             args.output_root,
             args.skip_install,
+            resolve_locators=not args.no_resolve_locators,
+            udid=args.udid,
         )
         print(f"  Spec: {spec_path}")
         print(f"  Test: {test_path}")
