@@ -82,7 +82,7 @@ def main() -> None:
     print(f"已生成脚本：{test_path}")
     print("运行测试请使用 pytest，不要直接用 python 执行测试文件：")
     print(f"  python -m pytest {output_dir} -m {priority} --alluredir=allure-results/{priority}")
-    print(f"或：python .cursor/skills/ui-auto-pytest-allure/scripts/run_priority.py {priority}")
+    print(f"或：python uiatest.py run --priority {priority}")
 
 
 if __name__ == "__main__":

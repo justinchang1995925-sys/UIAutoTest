@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import time
+from pathlib import Path
 from typing import Any
 
 import allure
@@ -48,17 +50,28 @@ def wait_clickable(driver, locator: dict[str, Any], timeout: int):
     return WebDriverWait(driver, timeout).until(EC.element_to_be_clickable(_by))
 
 
+def _chain_deadline(timeout: int) -> float:
+    return time.monotonic() + max(1, int(timeout))
+
+
+def _remaining_timeout(deadline: float) -> float:
+    return max(0.1, deadline - time.monotonic())
+
+
 def wait_visible_chain(driver, locators: list[dict[str, Any]], timeout: int):
     if not locators:
         raise ValueError("No locators provided.")
     if len(locators) == 1:
         return wait_visible(driver, locators[0], timeout)
 
-    per_try = max(2, timeout // len(locators))
+    deadline = _chain_deadline(timeout)
     last_error: Exception | None = None
     for locator in locators:
+        remaining = _remaining_timeout(deadline)
+        if remaining <= 0.1:
+            break
         try:
-            element = wait_visible(driver, locator, per_try)
+            element = wait_visible(driver, locator, max(1, int(remaining)))
             allure.attach(
                 str(locator),
                 name="locator_used_visible",
@@ -78,13 +91,16 @@ def wait_clickable_chain(driver, locators: list[dict[str, Any]], timeout: int):
     if len(locators) == 1:
         return wait_clickable(driver, locators[0], timeout)
 
-    per_try = max(2, timeout // len(locators))
+    deadline = _chain_deadline(timeout)
     last_error: Exception | None = None
     for locator in locators:
         if "coordinates" in locator:
             return locator
+        remaining = _remaining_timeout(deadline)
+        if remaining <= 0.1:
+            break
         try:
-            element = wait_clickable(driver, locator, per_try)
+            element = wait_clickable(driver, locator, max(1, int(remaining)))
             allure.attach(
                 str(locator),
                 name="locator_used_clickable",
@@ -208,11 +224,13 @@ def post_assert(driver, step: dict[str, Any], timeout: int):
     if isinstance(expect_activity, str) and expect_activity.strip():
         try:
             current = str(getattr(driver, "current_activity", "") or "")
-            assert expect_activity in current, (
-                f"Expected activity containing {expect_activity!r}, got {current!r}"
-            )
-        except Exception:
-            pass
+        except Exception as exc:
+            raise AssertionError(
+                f"Could not read current activity for expect_activity {expect_activity!r}: {exc}"
+            ) from exc
+        assert expect_activity in current, (
+            f"Expected activity containing {expect_activity!r}, got {current!r}"
+        )
 
 
 def run_step(driver, step: dict[str, Any], default_timeout: int):
@@ -276,6 +294,19 @@ def run_step(driver, step: dict[str, Any], default_timeout: int):
         time.sleep(float(step["seconds"]))
         return
 
+    if action == "screenshot":
+        file_name = str(step.get("file_name", "screenshot.png"))
+        output_dir = Path("screenshots")
+        output_dir.mkdir(exist_ok=True)
+        file_path = output_dir / file_name
+        driver.save_screenshot(str(file_path))
+        allure.attach.file(
+            str(file_path),
+            name=file_name,
+            attachment_type=allure.attachment_type.PNG,
+        )
+        return
+
     if action == "swipe":
         swipe(driver, step["start"], step["end"], int(step.get("duration_ms", 500)))
         return
@@ -287,16 +318,23 @@ def run_step(driver, step: dict[str, Any], default_timeout: int):
 
 
 def run_steps(driver, steps: list[dict[str, Any]], default_timeout: int):
-    for first in steps:
-        if first.get("action") == "loop":
-            continue
-        locators = step_locators(first)
-        if locators and "coordinates" not in locators[0]:
-            try:
-                wait_visible_chain(driver, locators, int(first.get("timeout", default_timeout)))
-            except TimeoutException:
-                pass
-        break
+    strict_warmup = os.getenv("UIATEST_STRICT_WARMUP", "").lower() in {"1", "true", "yes"}
+    skip_warmup = os.getenv("UIATEST_SKIP_WARMUP", "").lower() in {"1", "true", "yes"}
+
+    if not skip_warmup:
+        for first in steps:
+            if first.get("action") == "loop":
+                continue
+            locators = step_locators(first)
+            if locators and "coordinates" not in locators[0]:
+                try:
+                    wait_visible_chain(driver, locators, int(first.get("timeout", default_timeout)))
+                except TimeoutException as exc:
+                    if strict_warmup:
+                        raise TimeoutException(
+                            f"First step target not visible before run: {locators}"
+                        ) from exc
+            break
 
     for step in steps:
         if step["action"] == "loop":

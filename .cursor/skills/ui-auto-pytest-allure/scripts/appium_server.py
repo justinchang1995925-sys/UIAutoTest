@@ -191,7 +191,7 @@ def sync_capabilities_device(capabilities_path: Path) -> str | None:
                 "Warning: no capabilities file found for sync. "
                 f"Expected one of: {capabilities_path}, {template}, {fallback}"
             )
-            return device_id
+            return None
 
     # Choose device:
     # - Prefer the udid already recorded in the capabilities file (if connected)
@@ -223,6 +223,40 @@ def sync_capabilities_device(capabilities_path: Path) -> str | None:
     return device_id
 
 
+def get_device_state(device_id: str) -> str | None:
+    """Return adb state for device_id: device, offline, unauthorized, or None if absent."""
+    adb = shutil.which("adb")
+    if not adb:
+        return None
+    try:
+        output = subprocess.run(
+            [adb, "devices"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    for line in output.splitlines()[1:]:
+        parts = line.split()
+        if parts and parts[0] == device_id and len(parts) >= 2:
+            return parts[1]
+    return None
+
+
+def wait_for_device_ready(device_id: str, timeout_sec: int = 20) -> bool:
+    """Poll until device_id appears as authorized ``device`` in adb devices."""
+    deadline = time.monotonic() + timeout_sec
+    while time.monotonic() < deadline:
+        state = get_device_state(device_id)
+        if state == "device":
+            return True
+        if state in {"unauthorized", "offline"}:
+            print(f"Warning: device {device_id} is {state}; waiting for authorization...")
+        time.sleep(1)
+    return False
+
+
 def adb_connect(device: str) -> bool:
     """Connect a device over network, e.g. 192.168.1.8:5555.
 
@@ -239,6 +273,13 @@ def adb_connect(device: str) -> bool:
     output = output.strip().lower()
     if result.returncode == 0 and ("connected" in output or "already connected" in output):
         print(f"adb connect ok: {device}")
+        if not wait_for_device_ready(value, timeout_sec=20):
+            state = get_device_state(value) or "missing"
+            print(
+                f"Warning: adb connect succeeded but device is not ready (state={state}). "
+                "Check USB debugging authorization or network pairing."
+            )
+            return False
         return True
     print(f"adb connect failed: {device}\n{output}".rstrip())
     return False
@@ -287,6 +328,12 @@ def connect_device(target: str) -> str:
         return connected
 
     # Assume it's an adb udid (USB or already-connected network device).
+    if not wait_for_device_ready(value, timeout_sec=10):
+        state = get_device_state(value) or "missing"
+        raise SystemExit(
+            f"Device {value} is not ready for tests (adb state={state}). "
+            "Check USB debugging, authorization, or adb connect."
+        )
     return value
 
 

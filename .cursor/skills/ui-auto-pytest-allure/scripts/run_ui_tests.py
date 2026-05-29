@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -147,7 +148,20 @@ def _allure_results_dir_has_data(results_dir: Path) -> bool:
     return any(results_dir.glob("*.json"))
 
 
-def open_allure_html_report(results_dir: Path, report_name: str) -> bool:
+def clean_allure_results(results_dir: Path) -> None:
+    """Remove prior Allure JSON/attachments for a fresh run."""
+    if results_dir.is_dir():
+        shutil.rmtree(results_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Cleared Allure results: {results_dir}")
+
+
+def open_allure_html_report(
+    results_dir: Path,
+    report_name: str,
+    *,
+    static_report: bool = False,
+) -> bool:
     """Serve Allure results over HTTP and open the report in the browser."""
     results_dir = results_dir.resolve()
     if not _allure_results_dir_has_data(results_dir):
@@ -167,22 +181,23 @@ def open_allure_html_report(results_dir: Path, report_name: str) -> bool:
     report_dir.parent.mkdir(parents=True, exist_ok=True)
     env = augmented_path_env(PROJECT_ROOT)
 
-    print(f"Generating static report copy: {report_dir}")
-    generate = subprocess.run(
-        [
-            allure_cmd,
-            "generate",
-            str(results_dir),
-            "-o",
-            str(report_dir),
-            "--clean",
-        ],
-        cwd=str(PROJECT_ROOT),
-        env=env,
-        check=False,
-    )
-    if generate.returncode != 0:
-        print("Warning: allure generate failed; will still try allure serve.")
+    if static_report or os.getenv("UIATEST_ALLURE_STATIC", "").lower() in {"1", "true", "yes"}:
+        print(f"Generating static report copy: {report_dir}")
+        generate = subprocess.run(
+            [
+                allure_cmd,
+                "generate",
+                str(results_dir),
+                "-o",
+                str(report_dir),
+                "--clean",
+            ],
+            cwd=str(PROJECT_ROOT),
+            env=env,
+            check=False,
+        )
+        if generate.returncode != 0:
+            print("Warning: allure generate failed; will still try allure serve.")
 
     print(f"Starting Allure report server for {results_dir}")
     print("Do not open index.html directly with file:// — use the browser opened by allure serve.")
@@ -227,7 +242,8 @@ def run_priority_tests(
     ]
     command.extend(extra_args)
     print("Running:", " ".join(command))
-    return subprocess.call(command), allure_dir
+    print(f"Working directory: {PROJECT_ROOT}")
+    return subprocess.call(command, cwd=str(PROJECT_ROOT)), allure_dir
 
 
 def run_single_test(
@@ -250,7 +266,8 @@ def run_single_test(
     ]
     command.extend(extra_args)
     print("Running:", " ".join(command))
-    return subprocess.call(command), allure_dir
+    print(f"Working directory: {PROJECT_ROOT}")
+    return subprocess.call(command, cwd=str(PROJECT_ROOT)), allure_dir
 
 
 def main() -> None:
@@ -291,6 +308,16 @@ def main() -> None:
         dest="open_report",
         help="Do not open Allure HTML report after tests.",
     )
+    parser.add_argument(
+        "--fresh-results",
+        action="store_true",
+        help="Clear allure-results for this run before pytest (avoid historical runs in report).",
+    )
+    parser.add_argument(
+        "--static-report",
+        action="store_true",
+        help="Also run allure generate into allure-report/ (default: allure serve only).",
+    )
     parser.add_argument("pytest_args", nargs="*", help="Extra pytest arguments.")
     args = parser.parse_args()
 
@@ -322,16 +349,22 @@ def main() -> None:
         sync_capabilities_device(PROJECT_ROOT / "capabilities.local.json")
 
     if mode == "priority":
+        allure_dir = allure_root / target
+        if args.fresh_results:
+            clean_allure_results(allure_dir)
         exit_code, allure_dir = run_priority_tests(target, test_root, allure_root, args.pytest_args)
         report_name = target
     else:
+        allure_dir = allure_root / "single"
+        if args.fresh_results:
+            clean_allure_results(allure_dir)
         exit_code, allure_dir = run_single_test(target, test_root, allure_root, args.pytest_args)
         report_name = "single"
 
     repair_inspector_session(args.skip_repair)
 
     if args.open_report:
-        open_allure_html_report(allure_dir, report_name)
+        open_allure_html_report(allure_dir, report_name, static_report=args.static_report)
 
     raise SystemExit(exit_code)
 

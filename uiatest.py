@@ -33,18 +33,45 @@ def main() -> None:
     run_p.add_argument("--skip-repair", action="store_true")
     run_p.add_argument("--skip-appium-start", action="store_true")
     run_p.add_argument("--no-open-report", action="store_true")
+    run_p.add_argument(
+        "--fresh-results",
+        action="store_true",
+        help="Clear allure-results for this run before pytest.",
+    )
+    run_p.add_argument(
+        "--static-report",
+        action="store_true",
+        help="Also generate static allure-report/ copy (default: allure serve only).",
+    )
     run_p.add_argument("pytest_args", nargs="*", help="Extra pytest args after '--'.")
 
     imp_p = sub.add_parser("import", help="Import cases from CSV/XLSX sheet.")
     imp_p.add_argument("path", help="CSV/XLSX path")
     imp_p.add_argument("--spec-root", default="specs")
     imp_p.add_argument("--output-root", default="generated-tests/ui")
+    imp_p.add_argument("--dry-run", action="store_true")
+    imp_p.add_argument("--nl-only", action="store_true")
+    imp_p.add_argument("--skip-install", action="store_true")
+    imp_p.add_argument("--no-resolve-locators", action="store_true")
+    imp_p.add_argument("--udid", help="Device id for locator resolve.")
 
     gen_p = sub.add_parser("gen", help="Generate case from .nl.")
     gen_p.add_argument("path", help=".nl file path")
     gen_p.add_argument("--spec-root", default="specs")
     gen_p.add_argument("--output-root", default="generated-tests/ui")
     gen_p.add_argument("--skip-install", action="store_true")
+    gen_p.add_argument("--no-preview", action="store_true")
+    gen_p.add_argument("--no-resolve-locators", action="store_true")
+    gen_p.add_argument("--udid", help="Device id for locator resolve.")
+
+    sub.add_parser("doctor", help="Preflight: deps, adb, Appium, capabilities, Allure.")
+
+    clean_p = sub.add_parser("clean", help="Remove allure-results/report and optional logs.")
+    clean_p.add_argument("--results", action="store_true")
+    clean_p.add_argument("--report", action="store_true")
+    clean_p.add_argument("--logs", action="store_true")
+    clean_p.add_argument("--artifacts", action="store_true")
+    clean_p.add_argument("--dry-run", action="store_true")
 
     insp_p = sub.add_parser("inspect", help="Open Android Inspector.")
     insp_p.add_argument("--powershell", action="store_true", help="Use PowerShell script on Windows.")
@@ -70,35 +97,69 @@ def main() -> None:
             forward += ["--skip-appium-start"]
         if args.no_open_report:
             forward += ["--no-open-report"]
+        if args.fresh_results:
+            forward += ["--fresh-results"]
+        if args.static_report:
+            forward += ["--static-report"]
         if args.request:
             forward = [args.request, *forward]
         forward += list(args.pytest_args)
         raise SystemExit(_run("run_ui_tests.py", forward))
 
     if args.cmd == "import":
-        raise SystemExit(
-            _run(
-                "import_cases_from_sheet.py",
-                [args.path, "--spec-root", args.spec_root, "--output-root", args.output_root],
-            )
-        )
+        forward = [args.path, "--spec-root", args.spec_root, "--output-root", args.output_root]
+        if args.dry_run:
+            forward.append("--dry-run")
+        if args.nl_only:
+            forward.append("--nl-only")
+        if args.skip_install:
+            forward.append("--skip-install")
+        if args.no_resolve_locators:
+            forward.append("--no-resolve-locators")
+        if args.udid:
+            forward += ["--udid", args.udid]
+        raise SystemExit(_run("import_cases_from_sheet.py", forward))
 
     if args.cmd == "gen":
         forward = [args.path, "--spec-root", args.spec_root, "--output-root", args.output_root]
         if args.skip_install:
-            forward += ["--skip-install"]
+            forward.append("--skip-install")
+        if args.no_preview:
+            forward.append("--no-preview")
+        if args.no_resolve_locators:
+            forward.append("--no-resolve-locators")
+        if args.udid:
+            forward += ["--udid", args.udid]
         raise SystemExit(_run("create_case_from_nl.py", forward))
+
+    if args.cmd == "doctor":
+        raise SystemExit(_run("uiatest_doctor.py", []))
+
+    if args.cmd == "clean":
+        forward: list[str] = []
+        if args.results:
+            forward.append("--results")
+        if args.report:
+            forward.append("--report")
+        if args.logs:
+            forward.append("--logs")
+        if args.artifacts:
+            forward.append("--artifacts")
+        if args.dry_run:
+            forward.append("--dry-run")
+        raise SystemExit(_run("uiatest_clean.py", forward))
 
     if args.cmd == "inspect":
         ps1 = SKILL_DIR / "open_android_inspector.ps1"
-        if sys.platform == "win32" and ps1.exists():
+        if sys.platform == "win32" and ps1.exists() and args.powershell:
             raise SystemExit(
                 subprocess.call(
                     ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(ps1)],
                     cwd=str(PROJECT_ROOT),
                 )
             )
-        raise SystemExit("Inspector launcher is only supported on Windows via open_android_inspector.ps1.")
+        forward = ["--open-inspector"]
+        raise SystemExit(_run("repair_appium_session.py", forward))
 
     if args.cmd == "repair":
         forward = []
@@ -109,4 +170,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

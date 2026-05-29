@@ -40,19 +40,42 @@ def _load_capabilities() -> dict:
     )
 
 
+def _device_udid() -> str | None:
+    serial = os.getenv("ANDROID_SERIAL", "").strip()
+    if serial:
+        return serial
+    try:
+        caps = _load_capabilities()
+        udid = str(caps.get("appium:udid") or caps.get("udid") or "").strip()
+        if udid and udid not in {"<ANDROID_UDID>", ""}:
+            return udid
+    except Exception:
+        return None
+    return None
+
+
+def _adb_command(*args: str) -> list[str]:
+    command = ["adb"]
+    udid = _device_udid()
+    if udid:
+        command.extend(["-s", udid])
+    command.extend(args)
+    return command
+
+
 def _repair_uiautomator2_on_device() -> None:
     packages = (
         "io.appium.uiautomator2.server",
         "io.appium.uiautomator2.server.test",
     )
     try:
-        subprocess.run(["adb", "version"], check=True, capture_output=True, text=True)
+        subprocess.run(_adb_command("version"), check=True, capture_output=True, text=True)
     except (OSError, subprocess.CalledProcessError):
         return
 
     for package in packages:
         subprocess.run(
-            ["adb", "shell", "am", "force-stop", package],
+            _adb_command("shell", "am", "force-stop", package),
             check=False,
             capture_output=True,
             text=True,
@@ -77,7 +100,7 @@ def _safe_attach_png(name: str, png_bytes: bytes) -> None:
 def _adb_logcat_tail(lines: int = 250) -> str | None:
     try:
         result = subprocess.run(
-            ["adb", "logcat", "-d", "-v", "time", "-t", str(lines)],
+            _adb_command("logcat", "-d", "-v", "time", "-t", str(lines)),
             check=False,
             capture_output=True,
             text=True,
@@ -126,7 +149,7 @@ def _screenrecord_on_failure(seconds: int = 12) -> Path | None:
     if os.getenv("UIATEST_SCREENRECORD_ON_FAIL", "").lower() not in {"1", "true", "yes"}:
         return None
     try:
-        subprocess.run(["adb", "version"], check=True, capture_output=True, text=True)
+        subprocess.run(_adb_command("version"), check=True, capture_output=True, text=True)
     except (OSError, subprocess.CalledProcessError):
         return None
 
@@ -136,13 +159,13 @@ def _screenrecord_on_failure(seconds: int = 12) -> Path | None:
     local = local_dir / Path(remote).name
 
     subprocess.run(
-        ["adb", "shell", "screenrecord", "--time-limit", str(int(seconds)), remote],
+        _adb_command("shell", "screenrecord", "--time-limit", str(int(seconds)), remote),
         check=False,
         capture_output=True,
         text=True,
     )
-    subprocess.run(["adb", "pull", remote, str(local)], check=False, capture_output=True, text=True)
-    subprocess.run(["adb", "shell", "rm", "-f", remote], check=False, capture_output=True, text=True)
+    subprocess.run(_adb_command("pull", remote, str(local)), check=False, capture_output=True, text=True)
+    subprocess.run(_adb_command("shell", "rm", "-f", remote), check=False, capture_output=True, text=True)
     if local.exists() and local.stat().st_size > 0:
         return local
     return None
