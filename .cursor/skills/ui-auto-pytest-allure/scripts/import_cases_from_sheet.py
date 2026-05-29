@@ -149,6 +149,7 @@ def main() -> None:
 
     print(f"Loaded {len(cases)} case(s) from {sheet_path.name}")
     print("Required headers: 用例等级、用例名、功能模块、子模块、操作步骤")
+    print("Optional headers: 预期结果、标题、套件")
     print()
 
     for row_number, test_name, nl_text in cases:

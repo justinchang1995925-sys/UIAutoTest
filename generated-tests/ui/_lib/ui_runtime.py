@@ -172,6 +172,38 @@ def post_assert(driver, step: dict[str, Any], timeout: int):
                 continue
         else:
             raise AssertionError(f"Element is still visible: {expect_not_visible}")
+    expect_text = step.get("expect_text")
+    if isinstance(expect_text, dict):
+        locator = expect_text.get("locator")
+        expected_value = expect_text.get("value")
+        if isinstance(locator, dict) and expected_value is not None:
+            locators = [locator]
+            for item in expect_text.get("locators_fallback") or []:
+                if isinstance(item, dict):
+                    locators.append(item)
+            element = wait_visible_chain(driver, locators, timeout)
+            actual = element.text or element.get_attribute("text") or ""
+            expected = str(expected_value)
+            if expect_text.get("contains", True):
+                assert expected in actual, (
+                    f"Expected text containing {expected!r}, got {actual!r}"
+                )
+            else:
+                assert actual == expected, (
+                    f"Expected text {expected!r}, got {actual!r}"
+                )
+    expect_switch = step.get("expect_switch")
+    if expect_switch in {"on", "off"}:
+        desired_on = expect_switch == "on"
+        locators = step_locators(step)
+        label = wait_visible_chain(driver, locators, timeout)
+        switch = find_switch_near_label(label) or label
+        actual_on = element_is_checked(switch)
+        expected = "on" if desired_on else "off"
+        actual = "on" if actual_on else "off"
+        assert actual_on == desired_on, (
+            f"Switch state mismatch for {locators}: expected {expected}, got {actual}"
+        )
     expect_activity = step.get("expect_activity")
     if isinstance(expect_activity, str) and expect_activity.strip():
         try:

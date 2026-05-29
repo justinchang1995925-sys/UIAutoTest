@@ -145,7 +145,8 @@ python generated-tests/ui/P1/test_setting_password_idle_lock.py
 
 ## Batch Import from Excel / 飞书云表格
 
-Table headers (required): **用例等级、用例名、功能模块、子模块、操作步骤**
+Table headers (required): **用例等级、用例名、功能模块、子模块、操作步骤**  
+Recommended: **预期结果** — one line per step; merged into `，期望出现 …` / `，期望开关关闭` etc. for post-step assertions in generated code.
 
 1. Create the sheet in Excel or Feishu (multi-line steps in one cell).
 2. Export as `.csv` or `.xlsx`.

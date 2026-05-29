@@ -94,7 +94,7 @@ python .cursor/skills/ui-auto-pytest-allure/scripts/create_case_from_nl.py cases
 
 ### 3. 从 Excel / 飞书表格批量导入
 
-表头：**用例等级、用例名、功能模块、子模块、操作步骤**（详见 [docs/CASE_IMPORT.md](docs/CASE_IMPORT.md)）
+表头：**用例等级、用例名、功能模块、子模块、操作步骤**；推荐加 **预期结果**（与步骤逐行对应，生成每步断言）。详见 [docs/CASE_IMPORT.md](docs/CASE_IMPORT.md)
 
 ```powershell
 python .cursor/skills/ui-auto-pytest-allure/scripts/import_cases_from_sheet.py cases/import_template.csv

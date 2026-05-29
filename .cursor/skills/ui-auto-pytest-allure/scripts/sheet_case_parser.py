@@ -15,6 +15,7 @@ COLUMN_ALIASES: dict[str, tuple[str, ...]] = {
     "feature": ("功能模块", "功能", "feature", "模块功能"),
     "module": ("子模块", "模块", "module", "子功能"),
     "steps": ("操作步骤", "步骤", "steps", "用例步骤", "操作"),
+    "expected": ("预期结果", "期望结果", "expected", "预期", "校验"),
     "title": ("标题", "用例标题", "title"),
     "suite": ("套件", "suite"),
 }
@@ -104,6 +105,60 @@ def _format_step_lines(steps_text: str) -> list[str]:
     return numbered
 
 
+def _format_expected_lines(expected_text: str) -> list[str]:
+    if not expected_text.strip():
+        return []
+    lines: list[str] = []
+    for raw_line in expected_text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        lines.append(line)
+    return lines
+
+
+def expected_line_to_step_suffix(line: str) -> str:
+    """Convert one spreadsheet expected-result cell line to NL step suffix."""
+    text = line.strip()
+    if not text or text.lower() in {"-", "无", "空", "none", "n/a", "na", "跳过"}:
+        return ""
+
+    activity_match = re.match(r"^(?:activity|页面|activity名称)[:：]?\s*(.+)$", text, re.IGNORECASE)
+    if activity_match:
+        return f"，期望activity {activity_match.group(1).strip()}"
+
+    not_visible_match = re.match(r"^(?:不可见|不出现|隐藏)\s+(.+)$", text)
+    if not_visible_match:
+        return f"，期望不出现 {not_visible_match.group(1).strip()}"
+
+    visible_match = re.match(r"^(?:可见|出现|显示)\s+(.+)$", text)
+    if visible_match:
+        return f"，期望出现 {visible_match.group(1).strip()}"
+
+    text_match = re.match(r"^(?:文字|文本|断言文字)\s+(.+?)[，,]\s*(.+)$", text)
+    if text_match:
+        return f"，期望文字 {text_match.group(1).strip()}，{text_match.group(2).strip()}"
+
+    switch_match = re.match(r"^开关(?:为|状态)?(打开|开启|开|关闭|关|on|off)$", text, re.IGNORECASE)
+    if switch_match:
+        state = switch_match.group(1)
+        if state.lower() in {"on", "open", "打开", "开启", "开"}:
+            return "，期望开关打开"
+        return "，期望开关关闭"
+
+    return f"，期望出现 {text}"
+
+
+def _merge_steps_with_expected(step_lines: list[str], expected_lines: list[str]) -> list[str]:
+    merged: list[str] = []
+    for index, step in enumerate(step_lines):
+        suffix = ""
+        if index < len(expected_lines):
+            suffix = expected_line_to_step_suffix(expected_lines[index])
+        merged.append(f"{step}{suffix}" if suffix else step)
+    return merged
+
+
 def row_to_nl_text(row: list[Any], header_map: dict[str, int], row_number: int) -> str:
     test_name = _cell(row, header_map["test_name"])
     if not test_name:
@@ -126,6 +181,10 @@ def row_to_nl_text(row: list[Any], header_map: dict[str, int], row_number: int) 
         suite = _cell(row, header_map["suite"]) or suite
 
     step_lines = _format_step_lines(steps_text)
+    if "expected" in header_map:
+        expected_lines = _format_expected_lines(_cell(row, header_map["expected"]))
+        step_lines = _merge_steps_with_expected(step_lines, expected_lines)
+
     lines = [
         priority,
         f"用例名: {slugify(test_name)}",

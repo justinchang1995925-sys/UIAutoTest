@@ -25,6 +25,9 @@ STEPS = [
         "action": "tap",
         "locator": {
             "id": "com.pudutech.business.function:id/tvSettings"
+        },
+        "expect_visible": {
+            "android_uiautomator": "new UiSelector().text(\"密码与安全\")"
         }
     },
     {
@@ -32,6 +35,9 @@ STEPS = [
         "action": "tap",
         "locator": {
             "android_uiautomator": "new UiSelector().resourceId(\"com.pudutech.business.function:id/tv_name\").text(\"密码与安全\")"
+        },
+        "expect_visible": {
+            "android_uiautomator": "new UiSelector().text(\"电机锁\")"
         },
         "locators_fallback": [
             {
@@ -45,6 +51,9 @@ STEPS = [
         "locator": {
             "id": "com.pudutech.business.function:id/tv_motorLockTab"
         },
+        "expect_visible": {
+            "id": "com.pudutech.business.function:id/idle_lock_switch"
+        },
         "locators_fallback": [
             {
                 "android_uiautomator": "new UiSelector().text(\"电机锁\")"
@@ -57,16 +66,17 @@ STEPS = [
         "locator": {
             "id": "com.pudutech.business.function:id/idle_lock_switch"
         },
-        "state": "off"
+        "state": "off",
+        "expect_switch": "off"
     }
 ]
 
 
 @allure.suite('UI Automation')
 @allure.feature('密码与安全')
-@allure.story('进入设置-密码与安全-电机锁-关闭空闲时锁电机')
-@allure.title('进入设置-密码与安全-电机锁-关闭空闲时锁电机')
-@allure.description('Generated from natural language: 进入设置-密码与安全-电机锁-关闭空闲时锁电机')
+@allure.story('设置-密码与安全-setting_password_idle_lock')
+@allure.title('设置-密码与安全-setting_password_idle_lock')
+@allure.description('Generated from natural language: 设置-密码与安全-setting_password_idle_lock')
 @allure.severity('critical')
 @pytest.mark.ui
 @pytest.mark.P1

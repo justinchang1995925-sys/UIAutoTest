@@ -85,8 +85,20 @@ EXPECT_SUFFIX_RE = re.compile(
     r"^(?P<body>.+?)[，,]\s*期望(?:出现|可见)\s*(?P<visible>.+?)\s*$",
     re.IGNORECASE,
 )
+EXPECT_NOT_VISIBLE_SUFFIX_RE = re.compile(
+    r"^(?P<body>.+?)[，,]\s*期望(?:不出现|不可见)\s*(?P<visible>.+?)\s*$",
+    re.IGNORECASE,
+)
 EXPECT_ACTIVITY_SUFFIX_RE = re.compile(
-    r"^(?P<body>.+?)[，,]\s*期望(?:activity|Activity)\s*(?P<activity>.+?)\s*$",
+    r"^(?P<body>.+?)[，,]\s*期望(?:activity|Activity|页面)\s*(?P<activity>.+?)\s*$",
+    re.IGNORECASE,
+)
+EXPECT_TEXT_SUFFIX_RE = re.compile(
+    r"^(?P<body>.+?)[，,]\s*期望文字\s*(?P<target>.+?)[，,]\s*(?P<value>.+?)\s*$",
+    re.IGNORECASE,
+)
+EXPECT_SWITCH_SUFFIX_RE = re.compile(
+    r"^(?P<body>.+?)[，,]\s*期望开关(?P<state>打开|开启|开|关闭|关|on|off)\s*$",
     re.IGNORECASE,
 )
 
@@ -135,25 +147,52 @@ def parse_locator(target: str) -> dict[str, Any]:
     raise ValueError(f"Cannot build locator from target: {target!r}")
 
 
+def parse_step_expectations(line: str) -> tuple[str, dict[str, Any]]:
+    """Extract optional post-step expectations from a step line."""
+    raw = line.strip()
+    expectations: dict[str, Any] = {}
+
+    for pattern, kind in (
+        (EXPECT_TEXT_SUFFIX_RE, "text"),
+        (EXPECT_SWITCH_SUFFIX_RE, "switch"),
+        (EXPECT_ACTIVITY_SUFFIX_RE, "activity"),
+        (EXPECT_NOT_VISIBLE_SUFFIX_RE, "not_visible"),
+        (EXPECT_SUFFIX_RE, "visible"),
+    ):
+        match = pattern.match(raw)
+        if not match:
+            continue
+        raw = match.group("body").strip()
+        if kind == "text":
+            expectations["expect_text"] = {
+                "locator": parse_locator(match.group("target")),
+                "value": match.group("value").strip(),
+            }
+        elif kind == "switch":
+            expectations["expect_switch"] = normalize_switch_state(match.group("state"))
+        elif kind == "activity":
+            expectations["expect_activity"] = match.group("activity").strip()
+        elif kind == "not_visible":
+            expectations["expect_not_visible"] = parse_locator(match.group("visible"))
+        else:
+            expectations["expect_visible"] = parse_locator(match.group("visible"))
+        break
+
+    return raw, expectations
+
+
+def apply_step_expectations(step: dict[str, Any], expectations: dict[str, Any]) -> None:
+    for key, value in expectations.items():
+        if value is not None:
+            step[key] = value
+
+
 def parse_step_line(line: str) -> dict[str, Any] | None:
     raw = line.strip()
     if not raw or raw.startswith("#"):
         return None
 
-    # Optional post-action expectations, e.g.:
-    #   步骤2: 点击 密码与安全，期望出现 电机锁
-    #   步骤2: 点击 xxx，期望activity com.xxx.MainActivity
-    expect_visible: dict[str, Any] | None = None
-    expect_activity: str | None = None
-
-    match = EXPECT_SUFFIX_RE.match(raw)
-    if match:
-        raw = match.group("body").strip()
-        expect_visible = parse_locator(match.group("visible"))
-    match = EXPECT_ACTIVITY_SUFFIX_RE.match(raw)
-    if match:
-        raw = match.group("body").strip()
-        expect_activity = match.group("activity").strip()
+    raw, expectations = parse_step_expectations(raw)
 
     for action, pattern in STEP_PATTERNS:
         match = pattern.match(raw)
@@ -182,10 +221,7 @@ def parse_step_line(line: str) -> dict[str, Any] | None:
                 "locator": parse_locator(field),
                 "value": value.strip(),
             }
-            if expect_visible:
-                step["expect_visible"] = expect_visible
-            if expect_activity:
-                step["expect_activity"] = expect_activity
+            apply_step_expectations(step, expectations)
             return step
 
         if action == "assert_text":
@@ -212,10 +248,7 @@ def parse_step_line(line: str) -> dict[str, Any] | None:
                 "locator": parse_locator(target),
                 "state": state,
             }
-            if expect_visible:
-                step["expect_visible"] = expect_visible
-            if expect_activity:
-                step["expect_activity"] = expect_activity
+            apply_step_expectations(step, expectations)
             return step
 
         target = match.group(2) if action != "sleep" else ""
@@ -231,10 +264,7 @@ def parse_step_line(line: str) -> dict[str, Any] | None:
             "action": "tap",
             "locator": parse_locator(target),
         }
-        if expect_visible:
-            step["expect_visible"] = expect_visible
-        if expect_activity:
-            step["expect_activity"] = expect_activity
+        apply_step_expectations(step, expectations)
         return step
 
     return None
