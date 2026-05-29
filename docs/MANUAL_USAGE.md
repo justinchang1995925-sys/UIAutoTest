@@ -272,29 +272,227 @@ Remove-Item -Recurse -Force allure-report\* -ErrorAction SilentlyContinue
 
 ---
 
-## 6. 查元素与排错（可选）
+## 6. 查元素与排错（Appium Inspector）
 
-### 6.1 打开 Appium Inspector
+Inspector 用于在 Android 设备当前界面上**查看控件树**，读取 `resource-id`、可见文本、class 等属性，便于编写用例中的定位信息。
+
+**访问地址：** http://127.0.0.1:4723/inspector（需 Appium 已启动并加载 Inspector 插件）
+
+---
+
+### 6.1 前置条件
+
+打开 Inspector 前请确认：
+
+| 检查项 | 命令 / 说明 |
+|--------|-------------|
+| 项目目录 | 在 `D:\UIAutoTest` 下执行后续命令 |
+| Android 设备 | USB 调试已开启，或已通过 `adb connect` 连接 |
+| adb 可见设备 | `adb devices` 中至少一行以 `device` 结尾（非 `unauthorized` / `offline`） |
+| Node.js / Appium | 已安装 Appium CLI（`appium --version` 有输出） |
+| Inspector 插件 | 首次使用 PowerShell 脚本会自动安装；或手动：`appium plugin install inspector` |
+
+可选自检：
 
 ```powershell
+cd D:\UIAutoTest
+python uiatest.py doctor
+```
+
+`doctor` 中 Appium 未就绪属正常（尚未启动）；设备与 capabilities 应通过。
+
+---
+
+### 6.2 一键打开（推荐）
+
+在项目根目录执行**一条命令**即可（会自动启动 Appium、创建会话、**只打开一次** Inspector）：
+
+```powershell
+cd D:\UIAutoTest
 python uiatest.py inspect
 ```
 
-或：
+`inspect --powershell` 与上述命令等价（保留兼容旧用法）。
+
+内部流程：Windows 下先通过 PowerShell 安装/启动 Appium（不打开浏览器）→ 创建健康 session → 打开 http://127.0.0.1:4723/inspector 。
+
+成功时会输出 session id，在 Inspector 中选择 **Attach to Session** 附着即可查看控件。
+
+---
+
+### 6.3 分步手动打开（Appium 未运行或跨平台）
+
+适用于需要逐步排查，或非 Windows 环境。
+
+#### 步骤 1：连接设备
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .cursor/skills/ui-auto-pytest-allure/scripts/open_android_inspector.ps1
+cd D:\UIAutoTest
+adb devices
 ```
 
-在 Inspector 中查看 `resource-id`，写入用例：`步骤1: 点击 id:com.xxx:id/btn`。
+Wi‑Fi 设备示例：
 
-### 6.2 修复 UiAutomator2 会话
+```powershell
+adb connect 192.168.140.172:5555
+adb devices
+```
+
+#### 步骤 2：启动 Appium（带 Inspector 插件）
+
+**方式 A — 新开终端窗口（推荐）：**
+
+```powershell
+appium --use-plugins=inspector --allow-insecure=*:session_discovery --address 127.0.0.1 --port 4723
+```
+
+保持该窗口**不要关闭**；看到 `Appium REST http interface listener started` 即表示就绪。
+
+**方式 B — 运行测试时自动启动（无 Inspector 插件）：**
+
+```powershell
+python uiatest.py run "运行P1测试用例" --no-open-report
+```
+
+此方式仅启动普通 Appium，**不能**直接打开 Inspector；仍需按步骤 3～5 单独处理。
+
+#### 步骤 3：创建可 Attach 的会话
+
+Appium 就绪后，在项目根目录执行：
 
 ```powershell
 python uiatest.py repair --open-inspector
 ```
 
-Inspector 中选择 **Attach to Session**，使用脚本输出的 session id，勿刷新已失效的旧标签页。
+成功时会输出类似：
+
+```text
+Created healthy Appium session: e5ea9018-8ac0-49e0-8926-afdb9aeca822
+Saved session info: D:\UIAutoTest\.appium-inspector-session.json
+In Inspector: Session Builder -> Attach to Session -> select this session id.
+```
+
+会话信息保存在 `.appium-inspector-session.json`（本地文件，已在 `.gitignore` 中忽略）。
+
+#### 步骤 4：在浏览器打开 Inspector
+
+若 `repair --open-inspector` 未自动打开浏览器，手动访问：
+
+```text
+http://127.0.0.1:4723/inspector
+```
+
+也可使用统一 CLI（要求 Appium **已在运行**）：
+
+```powershell
+python uiatest.py inspect
+```
+
+等价于 `repair_appium_session.py --open-inspector`。
+
+#### 步骤 5：Attach 到已有会话
+
+在 Inspector 网页中：
+
+1. 左侧选择 **Session Builder**（或顶部进入会话配置）  
+2. 切换为 **Attach to Session**（附着到已有会话，而非新建）  
+3. 在会话列表中选择步骤 3 输出的 **session id**  
+   - 或打开 `.appium-inspector-session.json` 中的 `"session_id"` 字段  
+4. 点击 **Attach Session** / 确认附着  
+
+附着成功后，中间区域显示当前设备界面截图，右侧显示 **App Source** 控件树。
+
+> **重要：** 不要刷新已失效的旧 Inspector 标签页。测试跑完后旧 session 会销毁，需重新执行 `python uiatest.py repair --open-inspector` 再 Attach 新 session。
+
+---
+
+### 6.4 在 Inspector 中查看控件
+
+Attach 成功后：
+
+1. 在设备上切换到要查的界面（Inspector 会随操作刷新，或点击 Inspector 上的刷新按钮）  
+2. 在右侧 **App Source** 树中点击某个节点  
+3. 查看 **Selected Element** 面板中的属性，常用字段：
+
+| 属性 | 用途 |
+|------|------|
+| `resource-id` | 写入用例：`点击 id:com.xxx:id/btn` |
+| `text` / `content-desc` | 写入用例：`点击 设置` 或 `点击 accessibility id:xxx` |
+| `class` | 辅助判断控件类型（Button、TextView 等） |
+| `bounds` | 查看坐标，一般不必手写 |
+
+4. 需要验证点击时，可在 Inspector 中对选中元素执行 **Tap**，确认是否为预期控件  
+
+---
+
+### 6.5 将控件信息写入用例
+
+查到 `resource-id` 后，在自然语言或 CSV 步骤中使用：
+
+```text
+步骤1: 点击 id:com.pudutech.business.function:id/tvSettings
+```
+
+仅有可见文字、无稳定 id 时：
+
+```text
+步骤2: 点击 密码与安全
+```
+
+导入 / 生成时，若设备已连接，工具会尝试 dump UI，将文字步骤解析为 **id 优先 + text 兜底** 的定位链。
+
+---
+
+### 6.6 修复会话与常见问题
+
+#### 运行测试后 Inspector 无法刷新
+
+测试结束会关闭 Appium session，Inspector 附着会失效。重新执行：
+
+```powershell
+python uiatest.py repair --open-inspector
+```
+
+然后在 Inspector 中 **Attach to Session** 选择新的 session id。
+
+#### 提示「adb.exe 正由另一进程使用」/ Copy-Item 失败
+
+adb 正在运行时，脚本**不会**再强制复制 `adb.exe` 到 `platform-tools`，会直接使用当前可用的 adb 路径。请重新执行：
+
+```powershell
+python uiatest.py inspect --powershell
+```
+
+若 Appium 刚启动，再执行 `python uiatest.py repair --open-inspector`。
+
+#### 提示「Appium server is not ready」
+
+- 确认步骤 2 的 Appium 窗口仍在运行  
+- 浏览器访问 http://127.0.0.1:4723/status ，应看到 `"ready": true`  
+- 等待数秒后重试 `python uiatest.py repair --open-inspector`
+
+#### Inspector 页面空白或一直 Loading
+
+- 勿用旧 session；重新 `repair --open-inspector`  
+- 确认 `adb devices` 仍为 `device` 状态  
+- 关闭 Appium 窗口后重新用 `--powershell` 或手动 `appium --use-plugins=inspector ...` 启动  
+
+#### 多设备时 Attach 到了错误设备
+
+指定 adb 设备后再 repair：
+
+```powershell
+$env:ANDROID_SERIAL = "0123456789"
+python uiatest.py repair --open-inspector
+```
+
+或在 `capabilities.local.json` 中设置正确的 `appium:udid`。
+
+#### 直接调用 PowerShell 脚本（与 `inspect --powershell` 等价）
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .cursor/skills/ui-auto-pytest-allure/scripts/open_android_inspector.ps1
+```
 
 ---
 

@@ -74,7 +74,16 @@ def main() -> None:
     clean_p.add_argument("--dry-run", action="store_true")
 
     insp_p = sub.add_parser("inspect", help="Open Android Inspector.")
-    insp_p.add_argument("--powershell", action="store_true", help="Use PowerShell script on Windows.")
+    insp_p.add_argument(
+        "--powershell",
+        action="store_true",
+        help="(Legacy) Same as default on Windows; kept for compatibility.",
+    )
+    insp_p.add_argument(
+        "--skip-powershell-setup",
+        action="store_true",
+        help="Skip Windows PowerShell Appium/plugin bootstrap.",
+    )
 
     rep_p = sub.add_parser("repair", help="Repair Appium/UiAutomator2 session; optionally open inspector.")
     rep_p.add_argument("--open-inspector", action="store_true")
@@ -150,16 +159,10 @@ def main() -> None:
         raise SystemExit(_run("uiatest_clean.py", forward))
 
     if args.cmd == "inspect":
-        ps1 = SKILL_DIR / "open_android_inspector.ps1"
-        if sys.platform == "win32" and ps1.exists() and args.powershell:
-            raise SystemExit(
-                subprocess.call(
-                    ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(ps1)],
-                    cwd=str(PROJECT_ROOT),
-                )
-            )
-        forward = ["--open-inspector"]
-        raise SystemExit(_run("repair_appium_session.py", forward))
+        forward: list[str] = []
+        if args.skip_powershell_setup:
+            forward.append("--skip-powershell-setup")
+        raise SystemExit(_run("uiatest_inspect.py", forward))
 
     if args.cmd == "repair":
         forward = []

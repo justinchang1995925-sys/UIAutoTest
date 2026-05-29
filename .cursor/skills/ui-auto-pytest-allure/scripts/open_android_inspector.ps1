@@ -1,7 +1,8 @@
 param(
     [string]$ServerUrl = "http://127.0.0.1:4723",
     [switch]$NoInstall,
-    [switch]$NoAutoSession
+    [switch]$NoAutoSession,
+    [switch]$NoOpenInspector
 )
 
 $ErrorActionPreference = "Stop"
@@ -62,14 +63,36 @@ function Ensure-PlatformToolsLayout {
         return $platformToolsDir
     }
 
+    $adbInPlatformTools = Join-Path $platformToolsDir "adb.exe"
+    if (Test-Path $adbInPlatformTools) {
+        return $platformToolsDir
+    }
+
     New-Item -ItemType Directory -Force -Path $platformToolsDir | Out-Null
     foreach ($fileName in @("adb.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll")) {
         $source = Join-Path $SdkRoot $fileName
-        if (Test-Path $source) {
-            Copy-Item -Force $source (Join-Path $platformToolsDir $fileName)
+        $dest = Join-Path $platformToolsDir $fileName
+        if (-not (Test-Path $source)) {
+            continue
+        }
+        if (Test-Path $dest) {
+            continue
+        }
+        try {
+            Copy-Item -Force $source $dest -ErrorAction Stop
+        } catch {
+            Write-Host (
+                "Could not copy $fileName to platform-tools (file may be in use by adb). " +
+                "Using adb from SDK root: $adbInRoot"
+            )
+            return $SdkRoot
         }
     }
-    return $platformToolsDir
+
+    if (Test-Path $adbInPlatformTools) {
+        return $platformToolsDir
+    }
+    return $SdkRoot
 }
 
 function Resolve-AuthorizedAdbPath {
@@ -108,9 +131,19 @@ function Set-AndroidSdkEnvironment {
     if ((Split-Path -Leaf $platformToolsDir) -eq "platform-tools") {
         $sdkRoot = Split-Path -Parent $platformToolsDir
     } else {
+        # adb.exe under SDK root (non-standard layout). Use resolved path as-is when adb is
+        # already running — copying into platform-tools fails while adb.exe is locked.
         $sdkRoot = $platformToolsDir
-        $platformToolsDir = Ensure-PlatformToolsLayout -SdkRoot $sdkRoot
-        $adbPath = Join-Path $platformToolsDir "adb.exe"
+        if (Test-AdbDeviceReady -AdbPath $adbPath) {
+            Write-Host "Using adb from non-standard SDK layout (skip platform-tools copy)."
+        } else {
+            $layoutDir = Ensure-PlatformToolsLayout -SdkRoot $sdkRoot
+            if ((Split-Path -Leaf $layoutDir) -eq "platform-tools") {
+                $adbPath = Join-Path $layoutDir "adb.exe"
+            } else {
+                $adbPath = Join-Path $sdkRoot "adb.exe"
+            }
+        }
     }
 
     $env:ANDROID_HOME = $sdkRoot
@@ -347,6 +380,23 @@ function Test-AppiumServerReady {
     }
 }
 
+
+function Wait-AppiumServerReady {
+    param(
+        [string]$Url,
+        [int]$TimeoutSec = 90
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-AppiumServerReady -Url $Url) {
+            return $true
+        }
+        Start-Sleep -Seconds 2
+    }
+    return $false
+}
+
 function Get-AppiumSessions {
     param([string]$Url)
 
@@ -446,25 +496,33 @@ if (-not (Test-TcpPort -HostName $hostName -Port $port)) {
     Write-Host "Starting Appium with Inspector plugin at $ServerUrl ..."
     $appiumCommand = "appium --use-plugins=inspector --allow-insecure=*:session_discovery --address $hostName --port $port"
     Start-Process powershell -ArgumentList "-NoExit", "-Command", $appiumCommand
-    Start-Sleep -Seconds 5
 } else {
     Write-Host "Appium server appears to be running at $ServerUrl."
 }
 
+if (-not (Wait-AppiumServerReady -Url $ServerUrl -TimeoutSec 90)) {
+    Write-Host "Appium did not become ready within 90s at $ServerUrl."
+    exit 1
+}
+
+$sessionId = $null
 if (-not $NoAutoSession) {
     $capabilities = New-AndroidCapabilities
     if ($capabilities) {
         Save-Capabilities -Capabilities $capabilities
-        if (Test-AppiumServerReady -Url $ServerUrl) {
-            Remove-AppiumSessions -Url $ServerUrl
-            Repair-UiAutomator2OnDevice
-            New-AppiumSession -Url $ServerUrl -Capabilities $capabilities | Out-Null
-        } else {
-            Write-Host "Appium server is not ready yet. Open Inspector after the server finishes starting."
-        }
+        Remove-AppiumSessions -Url $ServerUrl
+        Repair-UiAutomator2OnDevice
+        $sessionId = New-AppiumSession -Url $ServerUrl -Capabilities $capabilities
     }
 }
 
-$inspectorUrl = "$ServerUrl/inspector"
-Write-Host "Opening Appium Inspector: $inspectorUrl"
-Start-Process $inspectorUrl
+if (-not $NoOpenInspector) {
+    if ($sessionId) {
+        $inspectorUrl = "$ServerUrl/inspector"
+        Write-Host "Opening Appium Inspector: $inspectorUrl"
+        Start-Process $inspectorUrl
+    } else {
+        Write-Host "Skip opening Inspector because no healthy Appium session was created."
+        Write-Host "Run: python uiatest.py repair --open-inspector"
+    }
+}
