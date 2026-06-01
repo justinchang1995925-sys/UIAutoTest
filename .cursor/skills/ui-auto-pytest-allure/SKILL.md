@@ -17,6 +17,17 @@ The user only needs to describe:
 
 Author cases in `.nl` files or CSV/Excel sheets — **not** by tapping the device to record.
 
+## Skill-only distribution (give this folder to others)
+
+Recipient copies **`ui-auto-pytest-allure`** to their project at `.cursor/skills/ui-auto-pytest-allure/`, then runs **once**:
+
+```bash
+python .cursor/skills/ui-auto-pytest-allure/scripts/uiatest_init.py
+python uiatest.py doctor
+```
+
+If the user asks to **initialize / 初始化** a UI automation project, run `uiatest_init.py` (or `python uiatest.py init` after scaffold exists). Full steps: [DISTRIBUTION.md](DISTRIBUTION.md).
+
 ## Default Stack
 
 - `pytest` + `allure-pytest` + `Appium-Python-Client` + `selenium`
@@ -34,10 +45,12 @@ python uiatest.py gen cases/your_case.nl
 python uiatest.py run "运行P1测试用例"
 python uiatest.py inspect
 python uiatest.py clean
+python uiatest.py init
 ```
 
 | Subcommand | Purpose |
 |------------|---------|
+| `init` | Bootstrap project from `scaffold/` (skill-only setup) |
 | `run` | Run by NL, `--priority`, or `--test` |
 | `import` | CSV/XLSX → `.nl` + spec + pytest |
 | `gen` | `.nl` → spec + pytest |

@@ -13,6 +13,10 @@
 - Appium Inspector 查元素、修复会话脚本
 - 支持两种运行说法：默认 USB/已连接设备；或先 `adb connect` 指定 IP:port 再运行
 
+## 仅分发 Skill 给他人
+
+复制 `.cursor/skills/ui-auto-pytest-allure/` 到对方项目后，对方在项目根执行一次初始化即可使用，无需克隆本仓库。详见 [DISTRIBUTION.md](.cursor/skills/ui-auto-pytest-allure/DISTRIBUTION.md)。
+
 ## 环境要求
 
 | 项目 | 说明 |
