@@ -1,0 +1,62 @@
+{
+  "suite": "UI Automation",
+  "feature": "地图",
+  "story": "设置-地图-setting_map",
+  "test_name": "setting_map",
+  "title": "设置-地图-setting_map",
+  "priority": "P1",
+  "timeout": 15,
+  "description": "Generated from natural language: 设置-地图-setting_map",
+  "steps": [
+    {
+      "name": "Step 1 Tap id:com.pudutech.business.function:id/btnSettings",
+      "action": "tap",
+      "locator": {
+        "id": "com.pudutech.business.function:id/btnSettings"
+      },
+      "expect_visible": {
+        "android_uiautomator": "new UiSelector().resourceId(\"com.pudutech.business.function:id/tv_name\").text(\"地图设置\")"
+      },
+      "expect_visible_locators_fallback": [
+        {
+          "android_uiautomator": "new UiSelector().text(\"地图设置\")"
+        }
+      ]
+    },
+    {
+      "name": "Step 2 Tap 地图设置",
+      "action": "tap",
+      "locator": {
+        "android_uiautomator": "new UiSelector().resourceId(\"com.pudutech.business.function:id/tv_name\").text(\"地图设置\")"
+      },
+      "expect_visible": {
+        "id": "com.pudutech.business.function:id/tv_edit_map"
+      },
+      "locators_fallback": [
+        {
+          "android_uiautomator": "new UiSelector().text(\"地图设置\")"
+        }
+      ],
+      "expect_visible_locators_fallback": [
+        {
+          "android_uiautomator": "new UiSelector().text(\"编辑地图\")"
+        }
+      ]
+    },
+    {
+      "name": "Step 3 Tap 编辑地图",
+      "action": "tap",
+      "locator": {
+        "id": "com.pudutech.business.function:id/tv_edit_map"
+      },
+      "expect_visible": {
+        "id": "com.pudutech.business.function:id/et_pwd"
+      },
+      "locators_fallback": [
+        {
+          "android_uiautomator": "new UiSelector().text(\"编辑地图\")"
+        }
+      ]
+    }
+  ]
+}

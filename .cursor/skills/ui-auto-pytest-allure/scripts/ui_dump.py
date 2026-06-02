@@ -8,16 +8,14 @@ import subprocess
 from typing import Any
 from xml.etree import ElementTree as ET
 
+from adb_utils import adb_command
+
 ADB_ENCODING = "utf-8"
 
 
 def run_adb(args: list[str], udid: str | None = None, timeout: int = 30) -> subprocess.CompletedProcess[str]:
-    command = ["adb"]
-    if udid:
-        command.extend(["-s", udid])
-    command.extend(args)
     return subprocess.run(
-        command,
+        adb_command(*args, udid=udid),
         text=True,
         capture_output=True,
         timeout=timeout,
@@ -33,12 +31,8 @@ def dump_ui_xml(udid: str) -> ET.Element:
     if dump_result.returncode != 0:
         raise RuntimeError(f"Could not dump UI XML: {dump_result.stderr or dump_result.stdout}")
 
-    command = ["adb"]
-    if udid:
-        command.extend(["-s", udid])
-    command.extend(["exec-out", "cat", remote_path])
     exec_result = subprocess.run(
-        command,
+        adb_command("exec-out", "cat", remote_path, udid=udid),
         capture_output=True,
         timeout=20,
         check=False,

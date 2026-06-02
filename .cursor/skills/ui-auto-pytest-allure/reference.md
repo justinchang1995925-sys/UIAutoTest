@@ -213,7 +213,18 @@ Supported natural-language patterns:
 | Batch by priority | `运行P0测试用例`, `执行P1用例`, `运行 P2` |
 | Single test file | `运行test_setting_password_idle_lock.py`, `运行 test_demo` |
 
-This runs tests with `python -m pytest`, auto-starts Appium, and writes Allure results to `allure-results/<priority>` or `allure-results/single`. Default report: `allure serve`.
+This runs tests with `python -m pytest`, auto-starts Appium, and writes Allure results to `allure-results/<priority>` or `allure-results/single`. Default report: `allure generate` → `allure open allure-report/<name>`.
+
+### Sheet auto-sync before run
+
+When `cases/import_template.csv` exists, `uiatest run` compares a **case-content fingerprint** (excludes the 测试结果 column) with `.tools/import-template.sync.json`:
+
+- Changed case definitions → auto `import`
+- Only PASS/FAIL writeback → skip import
+
+Flags: `--skip-sheet-sync`, `--sheet-rewrite-on-sync`, `--skip-sheet-rewrite`, `--skip-sheet-results`.
+
+Priority runs execute cases in **sheet row order** (not filename order), one isolated pytest process per case.
 
 ## Android Element Inspector
 
@@ -239,6 +250,8 @@ Then open:
 ```text
 http://127.0.0.1:4723/inspector
 ```
+
+**Inspector + test runs:** If keepalive is running when tests start, the runner pauses keepalive and closes only the inspector session id. Restore after run with `--auto-restore-inspector` or `UIATEST_AUTO_RESTORE_INSPECTOR=1`. Skip restore: `--skip-restore-inspector`.
 
 The Inspector page does not display the Android screen until a session exists. The script creates a session automatically with capabilities like:
 

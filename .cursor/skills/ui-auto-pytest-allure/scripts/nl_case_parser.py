@@ -21,13 +21,16 @@ STEP_PATTERNS = [
     (
         "loop",
         re.compile(
-            r"^(?:步骤\s*)?循环(?:步骤)?\s*(\d+)\s*[-~到]\s*(\d+)(?:\s*[,，]?\s*(\d+)\s*次)?$",
+            r"^(?:步骤\s*\d+\s*[:：]\s*)?(?:步骤\s*)?循环(?:步骤)?\s*(\d+)\s*[-~到]\s*(\d+)(?:\s*[,，]?\s*(\d+)\s*次)?$",
             re.IGNORECASE,
         ),
     ),
     (
         "sleep",
-        re.compile(r"^(?:步骤\s*)?等待\s*(\d+(?:\.\d+)?)\s*秒?$", re.IGNORECASE),
+        re.compile(
+            r"^(?:步骤\s*\d+\s*[:：]\s*)?(?:步骤\s*)?等待\s*(\d+(?:\.\d+)?)\s*秒?$",
+            re.IGNORECASE,
+        ),
     ),
     (
         "input",
@@ -101,6 +104,18 @@ EXPECT_SWITCH_SUFFIX_RE = re.compile(
     r"^(?P<body>.+?)[，,]\s*期望开关(?P<state>打开|开启|开|关闭|关|on|off)\s*$",
     re.IGNORECASE,
 )
+EXPECT_SWITCH_TOGGLE_SUFFIX_RE = re.compile(
+    r"^(?P<body>.+?)[，,]\s*期望开关(?:切换|翻转|toggle|change)\s*$",
+    re.IGNORECASE,
+)
+EXPECT_SWITCH_TOGGLE_PHRASE_SUFFIX_RE = re.compile(
+    r"^(?P<body>.+?)[，,]\s*期望(?:出现\s*)?开关状态要发生切换\s*$",
+    re.IGNORECASE,
+)
+EXPECT_EACH_SWITCH_TOGGLE_SUFFIX_RE = re.compile(
+    r"^(?P<body>.+?)[，,]\s*期望出现\s*每次点击[，,]?\s*开关状态都要发生切换\s*$",
+    re.IGNORECASE,
+)
 
 
 def normalize_switch_state(value: str) -> str:
@@ -154,6 +169,9 @@ def parse_step_expectations(line: str) -> tuple[str, dict[str, Any]]:
 
     for pattern, kind in (
         (EXPECT_TEXT_SUFFIX_RE, "text"),
+        (EXPECT_EACH_SWITCH_TOGGLE_SUFFIX_RE, "switch_toggle"),
+        (EXPECT_SWITCH_TOGGLE_PHRASE_SUFFIX_RE, "switch_toggle"),
+        (EXPECT_SWITCH_TOGGLE_SUFFIX_RE, "switch_toggle"),
         (EXPECT_SWITCH_SUFFIX_RE, "switch"),
         (EXPECT_ACTIVITY_SUFFIX_RE, "activity"),
         (EXPECT_NOT_VISIBLE_SUFFIX_RE, "not_visible"),
@@ -168,6 +186,8 @@ def parse_step_expectations(line: str) -> tuple[str, dict[str, Any]]:
                 "locator": parse_locator(match.group("target")),
                 "value": match.group("value").strip(),
             }
+        elif kind == "switch_toggle":
+            expectations["expect_switch_toggle"] = True
         elif kind == "switch":
             expectations["expect_switch"] = normalize_switch_state(match.group("state"))
         elif kind == "activity":
@@ -200,13 +220,15 @@ def parse_step_line(line: str) -> dict[str, Any] | None:
             continue
 
         if action == "loop":
-            return {
+            step = {
                 "name": f"Loop steps {match.group(1)}-{match.group(2)}",
                 "action": "loop",
                 "from_step": int(match.group(1)),
                 "to_step": int(match.group(2)),
                 "times": int(match.group(3) or "1"),
             }
+            apply_step_expectations(step, expectations)
+            return step
 
         if action == "sleep":
             seconds = float(match.group(1))

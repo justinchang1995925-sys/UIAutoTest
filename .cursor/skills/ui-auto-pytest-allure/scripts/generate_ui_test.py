@@ -124,7 +124,9 @@ def validate_spec(spec: dict[str, Any]) -> None:
 
 
 def json_literal(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, indent=4)
+    # We embed the spec directly into generated Python files. Use Python literal
+    # syntax so booleans are True/False (not JSON true/false).
+    return repr(value)
 
 
 def build_test_file(spec: dict[str, Any]) -> str:

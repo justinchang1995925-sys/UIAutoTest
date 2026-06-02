@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -20,7 +21,14 @@ PROJECT_ROOT = resolve_project_root(SCRIPT_DIR)
 from generate_ui_test import validate_spec, write_outputs  # noqa: E402
 from nl_case_parser import parse_natural_language_case  # noqa: E402
 from resolve_locators import resolve_spec_locators  # noqa: E402
-from sheet_case_parser import rows_to_nl_cases  # noqa: E402
+from sheet_case_parser import (  # noqa: E402
+    _format_expected_lines,
+    _format_step_lines,
+    _map_headers,
+    rows_to_nl_cases,
+)
+from sheet_import_sync import save_synced_fingerprint, sheet_cases_fingerprint  # noqa: E402
+from inspector_session import is_keepalive_running, stop_keepalive  # noqa: E402
 
 
 def _read_csv(path: Path) -> tuple[list[str], list[list[str]]]:
@@ -70,6 +78,50 @@ def _load_sheet(path: Path) -> tuple[list[str], list[list[str]]]:
     raise SystemExit(f"Unsupported file type: {suffix}. Use .csv or .xlsx")
 
 
+def _rewrite_csv_with_step_numbers(sheet_path: Path, headers: list[str], rows: list[list[str]]) -> None:
+    """Rewrite CSV in-place: add '步骤N:' prefixes to steps and expected."""
+    header_map = _map_headers(headers)
+    steps_col = header_map.get("steps")
+    expected_col = header_map.get("expected")
+    if steps_col is None:
+        return
+
+    for row in rows:
+        if steps_col >= len(row):
+            continue
+        steps_text = str(row[steps_col] or "")
+        try:
+            step_lines = _format_step_lines(steps_text)
+        except ValueError:
+            continue
+        row[steps_col] = "\n".join(step_lines)
+
+        if expected_col is None:
+            continue
+        if expected_col >= len(row):
+            row.extend([""] * (expected_col - len(row) + 1))
+        expected_lines = _format_expected_lines(str(row[expected_col] or ""))
+        numbered_expected: list[str] = []
+        for idx in range(len(step_lines)):
+            value = expected_lines[idx] if idx < len(expected_lines) else "-"
+            numbered_expected.append(f"步骤{idx + 1}预期结果：{value}")
+        row[expected_col] = "\n".join(numbered_expected)
+
+    out_path = sheet_path
+    try:
+        handle = sheet_path.open("w", encoding="utf-8-sig", newline="")
+    except PermissionError as exc:
+        raise SystemExit(
+            f"Cannot overwrite {sheet_path} (file may be open in Excel). "
+            "Close the file and retry, or import without --rewrite-sheet."
+        ) from exc
+
+    with handle:
+        writer = csv.writer(handle)
+        writer.writerow(headers)
+        writer.writerows(rows)
+
+
 def _write_nl_file(cases_root: Path, nl_text: str, test_name: str, priority: str) -> Path:
     out_path = cases_root / f"{test_name}.nl"
     out_path.write_text(nl_text, encoding="utf-8")
@@ -80,7 +132,6 @@ def _generate_from_nl(
     nl_text: str,
     spec_root: Path,
     output_root: Path,
-    skip_install: bool,
     resolve_locators: bool = True,
     udid: str | None = None,
 ) -> tuple[Path, Path]:
@@ -97,11 +148,34 @@ def _generate_from_nl(
     output_dir = output_root / priority
     test_path = write_outputs(spec, output_dir)
 
-    if not skip_install:
-        installer = SCRIPT_DIR / "install_ui_dependencies.py"
-        subprocess.run([sys.executable, str(installer)], check=False)
-
     return spec_path, test_path
+
+
+def _restore_inspector_if_paused() -> None:
+    if os.environ.get("UIATEST_INSPECTOR_WAS_ACTIVE") != "1":
+        return
+    if os.getenv("UIATEST_SKIP_INSPECTOR_RESTORE", "").lower() in {"1", "true", "yes"}:
+        return
+    if os.getenv("APPIUM_SKIP_AUTO_REPAIR", "").lower() in {"1", "true", "yes"}:
+        return
+
+    repair_script = SCRIPT_DIR / "repair_appium_session.py"
+    if not repair_script.is_file():
+        return
+
+    print("Restoring Appium Inspector session after import...")
+    subprocess.run(
+        [
+            sys.executable,
+            str(repair_script),
+            "--project-root",
+            str(PROJECT_ROOT),
+            "--for-inspector",
+            "--start-keepalive",
+        ],
+        cwd=str(PROJECT_ROOT),
+        check=False,
+    )
 
 
 def main() -> None:
@@ -137,6 +211,11 @@ def main() -> None:
         action="store_true",
         help="Skip adb UI dump to resolve text locators to id.",
     )
+    parser.add_argument(
+        "--rewrite-sheet",
+        action="store_true",
+        help="(CSV only) Rewrite sheet in-place: prefix steps/expected with 步骤N: for alignment.",
+    )
     parser.add_argument("--udid", help="Device id for locator resolve.")
     args = parser.parse_args()
 
@@ -145,6 +224,8 @@ def main() -> None:
         raise SystemExit(f"Sheet file not found: {sheet_path}")
 
     headers, data_rows = _load_sheet(sheet_path)
+    if args.rewrite_sheet and sheet_path.suffix.lower() == ".csv" and not args.dry_run:
+        _rewrite_csv_with_step_numbers(sheet_path, headers, data_rows)
     cases = rows_to_nl_cases(data_rows, headers)
 
     print(f"Loaded {len(cases)} case(s) from {sheet_path.name}")
@@ -153,6 +234,11 @@ def main() -> None:
     print()
 
     imported_priorities: set[str] = set()
+
+    if not args.no_resolve_locators and not args.dry_run and is_keepalive_running(PROJECT_ROOT):
+        os.environ["UIATEST_INSPECTOR_WAS_ACTIVE"] = "1"
+        stop_keepalive(PROJECT_ROOT)
+        print("Paused inspector keepalive for locator resolve during import.")
 
     for row_number, test_name, nl_text in cases:
         print(f"--- Row {row_number}: {test_name} ---")
@@ -171,7 +257,6 @@ def main() -> None:
             nl_text,
             args.spec_root,
             args.output_root,
-            args.skip_install,
             resolve_locators=not args.no_resolve_locators,
             udid=args.udid,
         )
@@ -183,9 +268,17 @@ def main() -> None:
     if args.dry_run:
         print("Dry run complete. No files written.")
     else:
-        print(f"Imported {len(cases)} case(s).")
-        for priority in sorted(imported_priorities):
-            print(f"  Run {priority}: python uiatest.py run --priority {priority}")
+        try:
+            if not args.nl_only and not args.skip_install:
+                installer = SCRIPT_DIR / "install_ui_dependencies.py"
+                subprocess.run([sys.executable, str(installer)], check=False)
+            print(f"Imported {len(cases)} case(s).")
+            if not args.nl_only:
+                save_synced_fingerprint(PROJECT_ROOT, sheet_cases_fingerprint(sheet_path), sheet_path)
+            for priority in sorted(imported_priorities):
+                print(f"  Run {priority}: python uiatest.py run --priority {priority}")
+        finally:
+            _restore_inspector_if_paused()
 
 
 if __name__ == "__main__":

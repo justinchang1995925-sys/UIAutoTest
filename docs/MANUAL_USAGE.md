@@ -18,7 +18,7 @@
         ↓
   run（pytest + Appium）
         ↓
-  allure serve（浏览器报告）
+  allure generate + open（浏览器报告）
 ```
 
 ---
@@ -66,6 +66,27 @@ adb devices
 首次运行测试时，若没有 `capabilities.local.json`，会从 `capabilities.template.json` 自动生成一份（本地文件，不提交 Git）。
 
 加载优先级：`APPIUM_CAPABILITIES` 环境变量 → `capabilities.local.json` → `capabilities.json`（legacy 占位）→ `capabilities.template.json`。
+
+#### 1.3.1 入口页面（起始 Activity）如何配置（推荐）
+
+每条用例默认会在开始前尝试跳转到“入口 Activity”，保证用例从同一初始界面起跑（可用 `--no-per-test-entry` 关闭）。
+
+推荐由测试角色在 **`capabilities.local.json`** 中自定义：
+
+- `appium:appPackage`
+- `appium:appActivity`（起始页面 Activity）
+
+也支持运行时覆盖（会写入 `capabilities.local.json`）：
+
+```powershell
+python uiatest.py run --priority P1 --start-activity com.example.MainActivity
+python uiatest.py run --priority P1 --start-package com.example.app --start-activity com.example.MainActivity
+```
+
+若你在 Agent 模式下对话，也可以直接说：
+
+> 起始页面的appActivity名：com.example.MainActivity  
+> 执行P1的测试用例
 
 ---
 
@@ -196,7 +217,7 @@ python uiatest.py run --device 192.168.140.172:5555 --priority P1
 # 本次运行前清空 allure-results（避免历史用例混入报告）
 python uiatest.py run "运行P1测试用例" --fresh-results
 
-# 除 allure serve 外，再生成静态 allure-report/ 副本
+# 除默认报告外，静态 HTML 始终在 allure-report/<name>/（--static-report 为别名）
 python uiatest.py run "运行P1测试用例" --static-report
 
 # 需要跑完后自动 repair / 打开 Inspector 时（默认关闭，可省约 20s）
@@ -204,6 +225,8 @@ python uiatest.py run --priority P1 --auto-repair
 ```
 
 依赖与 Allure CLI 已就绪时会**自动跳过 pip install**；日常回归建议不加 `--auto-repair`。
+
+`run` 前会检测 `cases/import_template.csv` 是否相对上次运行有变更：有变更则自动 `import`，无变更则跳过（见 `docs/CASE_IMPORT.md`）。禁用：`--skip-sheet-sync`。
 
 ### 4.3 参数形式（等价）
 
@@ -219,7 +242,7 @@ python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py --device 192
 - 启动 Appium（若未运行）
 - 写入/更新 `capabilities.local.json` 中的设备 id
 - 执行 `pytest`，结果写入 `allure-results/`
-- 默认 `allure serve` 在浏览器打开报告
+- 默认 `allure generate` + `allure open allure-report/<name>` 在浏览器打开报告
 
 不自动打开报告：
 
@@ -249,13 +272,14 @@ python .../run_ui_tests.py "运行P1测试用例" --no-open-report
 | 类型 | 路径 | 说明 |
 |------|------|------|
 | 原始结果 | `allure-results/P1/` 或 `allure-results/single/` | pytest 写入的 JSON，**会随运行次数追加** |
-| 在线报告 | 由 `allure serve` 打开 | **推荐**，不要用 `file://` 打开 `index.html` |
+| 在线报告 | `allure open allure-report/P1/` | **推荐**；runner 会自动 generate + open |
 | 静态副本 | `allure-report/P1/` | `allure generate` 生成，可整目录删除 |
 
 手动打开某次结果：
 
 ```powershell
-allure serve allure-results/P1
+allure generate allure-results/P1 -o allure-report/P1 --clean
+allure open allure-report/P1
 ```
 
 ### 清理报告（避免磁盘堆积）
@@ -324,9 +348,11 @@ python uiatest.py inspect
 
 `inspect --powershell` 与上述命令等价（保留兼容旧用法）。
 
-内部流程：Windows 下先通过 PowerShell 安装/启动 Appium（不打开浏览器）→ 创建健康 session → 打开 http://127.0.0.1:4723/inspector 。
+内部流程：Windows 下先通过 PowerShell 安装/启动 Appium（不打开浏览器）→ 创建**长时会话**（`newCommandTimeout` 默认 24 小时）→ 启动后台 **keepalive** 定时保活 → 打开 http://127.0.0.1:4723/inspector 。
 
-成功时会输出 session id，在 Inspector 中选择 **Attach to Session** 附着即可查看控件。
+成功时会输出 session id，在 Inspector 中选择 **Attach to Session** 附着即可查看控件。保活进程会每隔约 45 秒检查会话；若失效会自动重建并更新 `.appium-inspector-session.json`（日志见 `logs/inspector-keepalive.log`）。
+
+**注意：** 打开 Inspector 后请保持 keepalive 运行。跑自动化用例时，若 keepalive 正在运行，框架会**暂停 keepalive 并关闭 Inspector 专用 session**（不影响其它 Appium 会话）；跑完后可用 `--auto-restore-inspector` 或环境变量 `UIATEST_AUTO_RESTORE_INSPECTOR=1` 自动恢复。停止保活：`python uiatest.py repair --stop-inspector-keepalive`。
 
 ---
 
@@ -412,7 +438,7 @@ python uiatest.py inspect
 
 附着成功后，中间区域显示当前设备界面截图，右侧显示 **App Source** 控件树。
 
-> **重要：** 不要刷新已失效的旧 Inspector 标签页。测试跑完后旧 session 会销毁，需重新执行 `python uiatest.py repair --open-inspector` 再 Attach 新 session。
+> **重要：** 不要刷新已失效的旧 Inspector 标签页。测试跑完后 session 可能已销毁；执行 `python uiatest.py repair --open-inspector` 或 `python uiatest.py run --auto-restore-inspector` 后再 Attach 新 session。
 
 ---
 
@@ -532,7 +558,7 @@ python uiatest.py run "运行P1测试用例"
 | 写用例 | 发送 Excel/CSV 或自然语言描述 | 编辑 `cases/import_template.csv` 或 `cases/*.nl` |
 | 生成 | Agent 执行 import / gen | `python uiatest.py import ...` 或 `python uiatest.py gen ...` |
 | 运行 | 「运行 P1 测试用例」等自然语言 | `python uiatest.py run "运行P1测试用例"` |
-| 看报告 | Agent 触发 allure serve | 浏览器自动打开，或 `allure serve allure-results/P1` |
+| 看报告 | Agent 触发 generate + open | 浏览器自动打开，或 `allure open allure-report/P1` |
 
 **记三个命令即可：** `uiatest.py import` → `uiatest.py gen`（二选一）→ `uiatest.py run`。
 

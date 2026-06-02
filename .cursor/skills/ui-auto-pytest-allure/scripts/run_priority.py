@@ -26,7 +26,8 @@ def main() -> None:
 
     print(
         "Note: run_priority.py is deprecated. "
-        f"Use: python uiatest.py run --priority {args.priority.upper()}"
+        f"Use: python uiatest.py run --priority {args.priority.upper()}",
+        file=sys.stderr,
     )
 
     forward = [

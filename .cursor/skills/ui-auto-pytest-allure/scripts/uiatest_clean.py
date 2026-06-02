@@ -14,6 +14,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 from project_paths import resolve_project_root  # noqa: E402
 
 PROJECT_ROOT = resolve_project_root(SCRIPT_DIR)
+KEEPALIVE_LOG = "inspector-keepalive.log"
 
 
 def _remove_tree(path: Path, label: str, dry_run: bool) -> None:
@@ -28,6 +29,27 @@ def _remove_tree(path: Path, label: str, dry_run: bool) -> None:
     else:
         path.unlink()
     print(f"Removed {label}: {path}")
+
+
+def _remove_logs_preserve_keepalive(logs_dir: Path, dry_run: bool) -> None:
+    if not logs_dir.is_dir():
+        print(f"Skip logs (not found): {logs_dir}")
+        return
+    keepalive = logs_dir / KEEPALIVE_LOG
+    preserved = keepalive.is_file()
+    if dry_run:
+        suffix = f" (preserve {KEEPALIVE_LOG})" if preserved else ""
+        print(f"Would remove logs: {logs_dir}{suffix}")
+        return
+    if preserved:
+        backup = keepalive.read_bytes()
+    shutil.rmtree(logs_dir)
+    if preserved:
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        keepalive.write_bytes(backup)
+        print(f"Removed logs (preserved {KEEPALIVE_LOG}): {logs_dir}")
+    else:
+        print(f"Removed logs: {logs_dir}")
 
 
 def main() -> None:
@@ -52,7 +74,7 @@ def main() -> None:
     if args.all or args.report:
         _remove_tree(PROJECT_ROOT / "allure-report", "allure-report", args.dry_run)
     if args.all or args.logs:
-        _remove_tree(PROJECT_ROOT / "logs", "logs", args.dry_run)
+        _remove_logs_preserve_keepalive(PROJECT_ROOT / "logs", args.dry_run)
     if args.all or args.artifacts:
         _remove_tree(PROJECT_ROOT / "artifacts", "artifacts", args.dry_run)
 

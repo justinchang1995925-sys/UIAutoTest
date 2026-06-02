@@ -61,6 +61,8 @@ def main() -> None:
                 sys.executable,
                 str(REPAIR),
                 "--open-inspector",
+                "--for-inspector",
+                "--start-keepalive",
                 "--project-root",
                 str(PROJECT_ROOT),
             ],

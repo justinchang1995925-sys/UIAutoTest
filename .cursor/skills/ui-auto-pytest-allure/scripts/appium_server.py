@@ -122,28 +122,12 @@ def ensure_appium_server(
 
 
 def get_connected_device_ids() -> list[str]:
-    adb = shutil.which("adb")
-    if not adb:
-        return []
     try:
-        output = subprocess.run(
-            [adb, "devices"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout
-    except (OSError, subprocess.CalledProcessError):
-        return []
+        from adb_utils import list_authorized_devices
 
-    ids: list[str] = []
-    for line in output.splitlines()[1:]:
-        line = line.strip()
-        if not line:
-            continue
-        parts = line.split()
-        if len(parts) >= 2 and parts[1] == "device":
-            ids.append(parts[0])
-    return ids
+        return list_authorized_devices()
+    except Exception:
+        return []
 
 
 def get_connected_device_id() -> str | None:
@@ -351,3 +335,31 @@ def set_capabilities_device_id(capabilities_path: Path, device_id: str) -> None:
         encoding="utf-8",
     )
     print(f"Set capabilities device id: {device_id}")
+
+
+def set_capabilities_app_entry(
+    capabilities_path: Path,
+    *,
+    app_package: str | None = None,
+    app_activity: str | None = None,
+) -> None:
+    """Set appPackage/appActivity in capabilities.local.json (do not touch template)."""
+    if capabilities_path.is_dir():
+        capabilities_path = capabilities_path / "capabilities.local.json"
+    if not capabilities_path.exists():
+        sync_capabilities_device(capabilities_path)
+    caps = json.loads(capabilities_path.read_text(encoding="utf-8-sig"))
+    if app_package:
+        caps["appium:appPackage"] = app_package
+    if app_activity:
+        caps["appium:appActivity"] = app_activity
+    capabilities_path.write_text(
+        json.dumps(caps, ensure_ascii=False, indent=4) + "\n",
+        encoding="utf-8",
+    )
+    if app_package or app_activity:
+        print(
+            "Set capabilities entry: "
+            f"appPackage={caps.get('appium:appPackage','')!r}, "
+            f"appActivity={caps.get('appium:appActivity','')!r}"
+        )

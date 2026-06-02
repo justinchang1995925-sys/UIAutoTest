@@ -6,13 +6,26 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 import subprocess
 import sys
 import time
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+
+from adb_utils import AdbNotFoundError, ensure_single_authorized_device, force_stop_packages, resolve_adb
+from inspector_session import (  # noqa: E402
+    append_keepalive_log,
+    inspector_capabilities,
+    is_keepalive_running,
+    load_session_info,
+    save_session_info,
+    session_is_healthy,
+    stop_keepalive,
+)
 
 UIAUTOMATOR2_PACKAGES = (
     "io.appium.uiautomator2.server",
@@ -64,115 +77,28 @@ def _delete_sessions(server_url: str) -> None:
             print(f"Could not delete session {session_id}: {exc}")
 
 
-def _candidate_adb_paths() -> list[Path]:
-    candidates: list[Path] = []
-    if shutil.which("adb"):
-        candidates.append(Path(shutil.which("adb")))
-
-    for root in (
-        os.getenv("ANDROID_HOME"),
-        os.getenv("ANDROID_SDK_ROOT"),
-        r"D:\adb_new_for_android12",
-        r"D:\platform-tools",
-        "D:\\",
-    ):
-        if not root:
-            continue
-        root_path = Path(root)
-        candidates.append(root_path / "platform-tools" / "adb.exe")
-        candidates.append(root_path / "adb.exe")
-
-    unique: list[Path] = []
-    for path in candidates:
-        if path and path not in unique:
-            unique.append(path)
-    return unique
-
-
-def _adb_devices_output(adb_path: Path) -> str:
-    return subprocess.run(
-        [str(adb_path), "devices"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
-
-
-def _resolve_authorized_adb() -> Path:
-    for adb_path in _candidate_adb_paths():
-        if not adb_path.exists():
-            continue
-        try:
-            output = _adb_devices_output(adb_path)
-        except (OSError, subprocess.CalledProcessError):
-            continue
-        if any("\tdevice" in line for line in output.splitlines()[1:]):
-            return adb_path
-
-    raise SystemExit(
-        "No authorized Android device found. Unlock the phone, allow USB debugging, then run:\n"
-        "  adb kill-server\n"
-        "  adb devices\n"
-        "If you have multiple adb installations, authorize the one Appium uses "
-        "(often ANDROID_HOME/platform-tools/adb.exe)."
-    )
-
-
-def _ensure_platform_tools_layout(sdk_root: Path) -> Path:
-    platform_tools = sdk_root / "platform-tools"
-    adb_in_root = sdk_root / "adb.exe"
-    if not adb_in_root.exists():
-        return platform_tools
-
-    platform_tools.mkdir(parents=True, exist_ok=True)
-    for file_name in ("adb.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll"):
-        source = sdk_root / file_name
-        if source.exists():
-            target = platform_tools / file_name
-            if not target.exists() or source.stat().st_mtime > target.stat().st_mtime:
-                target.write_bytes(source.read_bytes())
-    return platform_tools
-
-
-def _configure_android_sdk_env() -> Path:
-    adb_path = _resolve_authorized_adb()
-    if adb_path.parent.name == "platform-tools":
-        sdk_root = adb_path.parent.parent
-    else:
-        sdk_root = adb_path.parent
-        platform_tools = _ensure_platform_tools_layout(sdk_root)
-        adb_path = platform_tools / "adb.exe"
-
-    os.environ["ANDROID_HOME"] = str(sdk_root)
-    os.environ["ANDROID_SDK_ROOT"] = str(sdk_root)
-    if shutil.which("adb") != str(adb_path):
-        os.environ["PATH"] = f"{adb_path.parent};{os.environ.get('PATH', '')}"
-    print(f"Using ANDROID_HOME={sdk_root}")
-    print(f"Using adb={adb_path}")
-    return adb_path
-
-
 def _ensure_adb_device_ready() -> None:
-    _configure_android_sdk_env()
+    try:
+        adb = resolve_adb()
+        device = ensure_single_authorized_device()
+    except AdbNotFoundError as exc:
+        raise SystemExit(str(exc)) from exc
+    print(f"Using adb from PATH: {adb}")
+    if device:
+        print(f"Target device: {device}")
 
 
 def _repair_uiautomator2_on_device() -> None:
     try:
-        subprocess.run(["adb", "version"], check=True, capture_output=True, text=True)
-    except (OSError, subprocess.CalledProcessError):
-        print("adb not found. Skip on-device UiAutomator2 repair.")
+        resolve_adb()
+    except AdbNotFoundError:
+        print("adb not found in PATH. Skip on-device UiAutomator2 repair.")
         return
 
     _ensure_adb_device_ready()
 
     print("Restarting UiAutomator2 instrumentation on device...")
-    for package in UIAUTOMATOR2_PACKAGES:
-        subprocess.run(
-            ["adb", "shell", "am", "force-stop", package],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
+    force_stop_packages(UIAUTOMATOR2_PACKAGES)
     time.sleep(3)
 
 
@@ -206,11 +132,42 @@ def _create_session(server_url: str, capabilities: dict) -> str:
 
 
 def _session_is_healthy(server_url: str, session_id: str) -> bool:
-    try:
-        _request("GET", f"{server_url}/session/{session_id}/source", timeout=30)
-        return True
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
-        return False
+    return session_is_healthy(server_url, session_id)
+
+
+def _start_keepalive_daemon(project_root: Path, server_url: str) -> None:
+    keepalive_script = SCRIPT_DIR / "inspector_keepalive.py"
+    if not keepalive_script.is_file():
+        return
+    log_path = project_root / "logs" / "inspector-keepalive.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_handle = log_path.open("a", encoding="utf-8")
+    popen_kwargs: dict = {
+        "cwd": str(project_root),
+        "stdout": log_handle,
+        "stderr": subprocess.STDOUT,
+        "close_fds": True,
+    }
+    if os.name == "nt":
+        popen_kwargs["creationflags"] = (
+            subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+        )
+    subprocess.Popen(
+        [
+            sys.executable,
+            str(keepalive_script),
+            "--project-root",
+            str(project_root),
+            "--server-url",
+            server_url,
+        ],
+        **popen_kwargs,
+    )
+    time.sleep(0.5)
+    if is_keepalive_running(project_root):
+        print("Inspector keepalive started (session stays online; see logs/inspector-keepalive.log).")
+    else:
+        print("Warning: could not verify inspector keepalive process.")
 
 
 def repair(
@@ -218,6 +175,9 @@ def repair(
     project_root: Path | None = None,
     recreate_session: bool = True,
     open_inspector: bool = False,
+    *,
+    for_inspector: bool = False,
+    start_keepalive: bool = False,
 ) -> str | None:
     root = project_root or Path.cwd()
     if not _server_ready(server_url):
@@ -228,12 +188,21 @@ def repair(
 
     print(f"Repairing Appium / UiAutomator2 at {server_url} ...")
     _ensure_adb_device_ready()
-    _delete_sessions(server_url)
-    _repair_uiautomator2_on_device()
 
-    session_id = None
-    if recreate_session:
-        capabilities = _load_capabilities(root)
+    session_id: str | None = None
+    existing = load_session_info(root) if for_inspector else None
+    existing_id = str((existing or {}).get("session_id") or "").strip()
+    if for_inspector and existing_id and session_is_healthy(server_url, existing_id):
+        print(f"Reusing healthy inspector session: {existing_id}")
+        session_id = existing_id
+    else:
+        _delete_sessions(server_url)
+        if not (for_inspector and is_keepalive_running(root)):
+            _repair_uiautomator2_on_device()
+
+    if session_id is None and recreate_session:
+        base_caps = _load_capabilities(root)
+        capabilities = inspector_capabilities(base_caps) if for_inspector else base_caps
         last_error = None
         session_id = None
         for attempt in range(1, 4):
@@ -259,28 +228,44 @@ def repair(
                     "Check device connection and Appium server logs."
                 )
 
-        session_file = root / ".appium-inspector-session.json"
-        session_file.write_text(
-            json.dumps(
-                {
-                    "server_url": server_url,
-                    "session_id": session_id,
-                    "inspector_url": f"{server_url}/inspector",
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
+        save_session_info(
+            root,
+            {
+                "server_url": server_url,
+                "session_id": session_id,
+                "inspector_url": f"{server_url}/inspector",
+                "keepalive": bool(for_inspector or start_keepalive),
+            },
         )
+        session_file = root / ".appium-inspector-session.json"
         print(f"Created healthy Appium session: {session_id}")
         print(f"Saved session info: {session_file}")
         print("In Inspector: Session Builder -> Attach to Session -> select this session id.")
-        print("Do not refresh an old/dead session tab.")
+    elif session_id and for_inspector:
+        save_session_info(
+            root,
+            {
+                "server_url": server_url,
+                "session_id": session_id,
+                "inspector_url": f"{server_url}/inspector",
+                "keepalive": True,
+            },
+        )
+
+    if session_id and (for_inspector or start_keepalive):
+        stop_keepalive(root)
+        _start_keepalive_daemon(root, server_url)
+        append_keepalive_log(root, f"Inspector opened with session {session_id}")
 
     if open_inspector:
         import webbrowser
 
         webbrowser.open(f"{server_url}/inspector")
+        print(
+            "Inspector keepalive is running; the session stays online. "
+            "If refresh fails after a long idle, re-attach using the latest session id "
+            "from .appium-inspector-session.json"
+        )
 
     return session_id
 
@@ -291,13 +276,36 @@ def main() -> None:
     parser.add_argument("--project-root", type=Path, default=Path.cwd())
     parser.add_argument("--no-recreate-session", action="store_true")
     parser.add_argument("--open-inspector", action="store_true")
+    parser.add_argument(
+        "--for-inspector",
+        action="store_true",
+        help="Long-lived session + optional keepalive (used by uiatest inspect).",
+    )
+    parser.add_argument(
+        "--start-keepalive",
+        action="store_true",
+        help="Start background keepalive after creating session.",
+    )
+    parser.add_argument(
+        "--stop-keepalive",
+        action="store_true",
+        help="Stop inspector keepalive daemon only.",
+    )
     args = parser.parse_args()
 
+    if args.stop_keepalive:
+        stop_keepalive(args.project_root)
+        print("Inspector keepalive stopped.")
+        return
+
+    for_inspector = args.for_inspector or args.open_inspector
     repair(
         server_url=args.server_url,
         project_root=args.project_root,
         recreate_session=not args.no_recreate_session,
         open_inspector=args.open_inspector,
+        for_inspector=for_inspector,
+        start_keepalive=args.start_keepalive or for_inspector,
     )
 
 

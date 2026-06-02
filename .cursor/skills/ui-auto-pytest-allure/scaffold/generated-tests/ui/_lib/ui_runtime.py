@@ -252,13 +252,73 @@ def _wait_not_visible_chain(driver, locators: list[dict[str, Any]], timeout: int
     ) from last_error
 
 
+def _refind_switch_element(driver, locators: list[dict[str, Any]], timeout: int):
+    refreshed = wait_visible_chain(driver, locators, timeout)
+    return _resolve_switch_element(refreshed)
+
+
+def _read_switch_checked(driver, locators: list[dict[str, Any]], timeout: int) -> bool | None:
+    try:
+        label = wait_visible_chain(driver, locators, max(1, int(timeout)))
+        switch = _resolve_switch_element(label)
+        return element_is_checked(switch)
+    except Exception:
+        return None
+
+
+def _click_switch(driver, locators: list[dict[str, Any]], timeout: int) -> None:
+    """Click the real Switch widget (same target as set_switch)."""
+    label = wait_visible_chain(driver, locators, timeout)
+    switch = _resolve_switch_element(label)
+
+    def _refind() -> Any:
+        return _refind_switch_element(driver, locators, timeout)
+
+    safe_click(switch, refind=_refind)
+    _settle_after_action()
+
+
+def _assert_switch_toggled(
+    driver,
+    locators: list[dict[str, Any]],
+    before_switch: bool,
+    step_timeout: int,
+) -> None:
+    assert_timeout = _post_assert_timeout(step_timeout)
+    poll = 0.2
+
+    def _wait_toggled() -> bool:
+        end = time.monotonic() + max(1, int(assert_timeout))
+        while time.monotonic() < end:
+            current = _read_switch_checked(driver, locators, 1)
+            if current is not None and current != before_switch:
+                return True
+            time.sleep(poll)
+        return False
+
+    if _wait_toggled():
+        return
+
+    try:
+        _click_switch(driver, locators, min(5, step_timeout))
+    except Exception:
+        pass
+
+    if not _wait_toggled():
+        after = _read_switch_checked(driver, locators, 2)
+        raise AssertionError(
+            f"Expected switch toggled for {locators}: "
+            f"before={before_switch!r}, after={after!r}, "
+            f"timeout={assert_timeout}s"
+        )
+
+
 def set_switch_state(driver, locators: list[dict[str, Any]], desired_on: bool, timeout: int):
     label = wait_visible_chain(driver, locators, timeout)
     switch = _resolve_switch_element(label)
 
     def _refind_switch():
-        refreshed = wait_visible_chain(driver, locators, timeout)
-        return _resolve_switch_element(refreshed)
+        return _refind_switch_element(driver, locators, timeout)
 
     if element_is_checked(switch) != desired_on:
         safe_click(switch, refind=_refind_switch)
@@ -312,6 +372,7 @@ def post_assert(driver, step: dict[str, Any], timeout: int):
         assert actual_on == desired_on, (
             f"Switch state mismatch for {locators}: expected {expected}, got {actual}"
         )
+    # expect_switch_toggle is handled in run_step because it needs pre-click state.
     expect_activity = step.get("expect_activity")
     if isinstance(expect_activity, str) and expect_activity.strip():
         try:
@@ -331,11 +392,33 @@ def run_step(driver, step: dict[str, Any], default_timeout: int):
     locators = step_locators(step)
 
     if action in {"tap", "click"}:
+        expect_visible = field_locators(step, "expect_visible")
+        skip_tap = step.get("skip_tap_if_visible")
+        if skip_tap is None:
+            skip_tap = os.getenv("UIATEST_TAP_SKIP_IF_VISIBLE", "1").lower() not in {
+                "0",
+                "false",
+                "no",
+            }
+        if expect_visible and skip_tap:
+            try:
+                wait_visible_chain(driver, expect_visible, min(3, timeout))
+                return
+            except Exception:
+                pass
         if locators and "coordinates" in locators[0]:
             point = locators[0]["coordinates"]
             tap_coordinates(driver, int(point["x"]), int(point["y"]))
             post_assert(driver, step, timeout)
             return
+        if step.get("expect_switch_toggle"):
+            before_switch = _read_switch_checked(driver, locators, timeout)
+            _click_switch(driver, locators, timeout)
+            if before_switch is not None:
+                _assert_switch_toggled(driver, locators, before_switch, timeout)
+            post_assert(driver, step, timeout)
+            return
+
         element = wait_clickable_chain(driver, locators, timeout)
 
         def _refind_clickable():
@@ -435,9 +518,20 @@ def run_steps(driver, steps: list[dict[str, Any]], default_timeout: int):
             to_step = int(step["to_step"])
             times = int(step.get("times", 1))
             loop_steps = steps[from_step - 1 : to_step]
+            if step.get("expect_switch_toggle"):
+                for body_step in loop_steps:
+                    if body_step.get("action") in {"tap", "click"}:
+                        body_step["expect_switch_toggle"] = True
+            loop_settle = os.getenv("UIATEST_LOOP_ITERATION_SETTLE_SEC", "").strip()
+            try:
+                loop_settle_sec = max(0.0, float(loop_settle)) if loop_settle else 0.0
+            except ValueError:
+                loop_settle_sec = 0.0
             for loop_index in range(1, times + 1):
                 with allure.step(f"{step.get('name', 'Loop')} #{loop_index}"):
                     run_steps(driver, loop_steps, default_timeout)
+                    if loop_settle_sec > 0 and loop_index < times:
+                        time.sleep(loop_settle_sec)
             continue
 
         with allure.step(step.get("name", step["action"])):

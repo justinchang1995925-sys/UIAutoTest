@@ -48,11 +48,27 @@ python uiatest.py doctor
 - `appium:appPackage` / `appium:appActivity`  
 - `appium:udid`（或连接设备后由 `inspect` / 运行脚本写入 local 文件）
 
+建议将“起始页面 Activity”写在 `capabilities.local.json`，并保持 `capabilities.template.json` 为占位模板，方便不同测试角色各自配置。
+
+也可在运行时覆盖（会写入 `capabilities.local.json`）：
+
+```powershell
+python uiatest.py run --priority P1 --start-activity com.example.MainActivity
+python uiatest.py run --priority P1 --start-package com.example.app --start-activity com.example.MainActivity
+```
+
+Agent 对话时也支持直接说明：
+
+> 起始页面的appActivity名：com.example.MainActivity  
+> 执行P1的测试用例
+
 ```powershell
 python uiatest.py inspect
 python uiatest.py gen cases/template.nl
 python uiatest.py run --priority P1
 ```
+
+报告：`allure generate` → `allure open allure-report/P1`（runner 默认自动执行）。表格同步与结果回写见项目内 `docs/CASE_IMPORT.md`（完整仓库）或 Skill 内 `reference.md`。
 
 ---
 

@@ -100,9 +100,11 @@ python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py "运行test_
 查看报告：
 
 ```bash
-allure serve allure-results/P0
-allure serve allure-results/single
+allure generate allure-results/P0 -o allure-report/P0 --clean
+allure open allure-report/P0
 ```
+
+或跑完后由 runner 自动 generate + open。
 
 ## Open Element Inspector
 

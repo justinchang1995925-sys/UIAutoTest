@@ -59,6 +59,8 @@ python uiatest.py init
 | `inspect` | Start Appium session + open Inspector once |
 | `repair` | Repair UiAutomator2 session |
 
+`run` 常用参数：`--skip-sheet-sync`、`--sheet-rewrite-on-sync`、`--skip-sheet-rewrite`、`--skip-sheet-results`、`--fresh-results`、`--no-open-report`、`--auto-restore-inspector`、`--skip-restore-inspector`、`--device`、`--no-per-test-entry`。
+
 Long-form scripts under `.cursor/skills/ui-auto-pytest-allure/scripts/` still work; prefer `uiatest.py` for users.
 
 ## Primary Workflow: Natural Language → Generated Case
@@ -128,7 +130,7 @@ Load order:
 
 `capabilities.local.json` is created from template on first run when missing. Inspector writes to **`capabilities.local.json`**, not the tracked file.
 
-After tests finish, the runner uses **`allure serve`** (local HTTP). Use `--no-open-report` to skip. Static HTML copy: `--static-report`.
+After tests finish, the runner runs **`allure generate`** then **`allure open allure-report/<name>`**. Use `--no-open-report` to skip. `--static-report` is an alias (HTML always under `allure-report/`).
 
 **Never run a generated test file directly with `python test_xxx.py`.** Always use `pytest` or `uiatest run`.
 
@@ -146,6 +148,19 @@ python uiatest.py import cases/your_cases.csv
 ```
 
 See [docs/CASE_IMPORT.md](../../../docs/CASE_IMPORT.md) and `cases/import_template.csv`.
+
+### Auto-sync before run
+
+On `uiatest run`, compare **case-content fingerprint** (excludes 测试结果 column) with `.tools/import-template.sync.json`:
+
+- Case definition changed → auto import
+- Only result writeback → skip import
+
+Disable: `--skip-sheet-sync` or `UIATEST_SKIP_SHEET_SYNC=1`.  
+Optional CSV step renumber on sync: `--sheet-rewrite-on-sync`.  
+Disable renumber: `--skip-sheet-rewrite` or `UIATEST_SKIP_SHEET_REWRITE=1`.
+
+After run, PASS/FAIL/SKIP is written back to the sheet unless `--skip-sheet-results`. Priority runs use **sheet row order** and **one pytest process per case** (isolated runs).
 
 ## Natural Language Format
 
@@ -189,7 +204,9 @@ If refresh fails with instrumentation errors:
 python uiatest.py repair --open-inspector
 ```
 
-Do not refresh dead Inspector tabs. `run_ui_tests.py` auto-repairs after test runs when Inspector may be used next.
+**Keepalive + test runs:** If inspector keepalive is running when tests start, the runner pauses keepalive and closes only the inspector session. After tests, restore with `--auto-restore-inspector` or `UIATEST_AUTO_RESTORE_INSPECTOR=1`. Import with locator resolve also pauses/restores keepalive automatically.
+
+Do not refresh dead Inspector tabs. Use Attach to Session with the new session id from `.appium-inspector-session.json`.
 
 ## Supported Actions
 

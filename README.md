@@ -113,7 +113,7 @@ python .cursor/skills/ui-auto-pytest-allure/scripts/import_cases_from_sheet.py c
 运行前会**自动启动 Appium**（若未运行），并确保能力文件可用（优先使用 `capabilities.local.json`）。
 
 ```powershell
-# 运行单条用例（自动启动 Appium + 跑完后 allure serve 打开报告）
+# 运行单条用例（跑完后 generate + open 打开 Allure 报告）
 python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py "运行 setting_password_idle_lock"
 
 # 运行某优先级全部用例（默认：使用当前已连接设备，通常为 USB）
@@ -145,24 +145,24 @@ python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py --priority P
 
 ### 5. 查看测试报告
 
-跑完后会**自动启动 Allure 本地服务**并在浏览器打开报告（不要用 `file://` 直接打开 `index.html`，否则会一直 Loading）。
+跑完后会 **`allure generate`** 生成 HTML，再 **`allure open allure-report/<name>`** 在浏览器打开（不要用 `file://` 打开 `index.html`，也不要对 `allure-results/` 执行 `allure open`）。
 
 | 类型 | 路径 |
 |------|------|
 | 原始结果 | `allure-results/single/` 或 `allure-results/P1/` |
-| 静态副本 | `allure-report/single/`（可选备份） |
-| 在线查看 | 由 `allure serve` 自动打开 |
+| HTML 报告 | `allure-report/P1/` 或 `allure-report/single/` |
 
 不自动打开报告：
 
 ```powershell
-python .cursor/skills/ui-auto-pytest-allure/scripts/run_ui_tests.py --test test_setting_password_idle_lock.py --no-open-report
+python uiatest.py run --test test_setting_password_idle_lock.py --no-open-report
 ```
 
-手动查看（推荐）：
+手动查看：
 
 ```powershell
-allure serve allure-results/P1
+allure generate allure-results/P1 -o allure-report/P1 --clean
+allure open allure-report/P1
 ```
 
 ### 6. capabilities 文件说明（建议使用 template + local）
@@ -202,6 +202,17 @@ allure serve allure-results/P1
 | 优先级 | 用例 | 说明 |
 |--------|------|------|
 | P1 | `setting_password_idle_lock` | 设置 → 密码与安全 → 电机锁 → 关闭空闲时锁电机 |
+| P1 | `setting_map` | 设置 → 地图 → 关闭地图显示 |
+
+## 运行前自动同步表格（可选）
+
+`python uiatest.py run` 会对比 `cases/import_template.csv` 的**用例内容指纹**（不含「测试结果」列）与 `.tools/import-template.sync.json`：有变更则自动 import，仅写回 PASS/FAIL 不会触发重导入。详见 [docs/CASE_IMPORT.md](docs/CASE_IMPORT.md)。
+
+```powershell
+python uiatest.py run --priority P1              # 默认：按表格行序跑 P1，结果回写 CSV
+python uiatest.py run --priority P1 --skip-sheet-sync
+python uiatest.py run --priority P1 --sheet-rewrite-on-sync   # 同步时回写 步骤N: 到 CSV
+```
 
 ## 常见问题
 

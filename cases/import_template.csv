@@ -1,8 +1,17 @@
-﻿用例等级,用例名,功能模块,子模块,操作步骤,预期结果
-P1,setting_password_idle_lock,设置,密码与安全,"点击 id:com.pudutech.business.function:id/tvSettings
-点击 密码与安全
-点击 电机锁
-设置开关 id:com.pudutech.business.function:id/idle_lock_switch 关闭","可见 密码与安全
-可见 电机锁
-可见 id:com.pudutech.business.function:id/idle_lock_switch
-开关关闭"
+﻿用例等级,用例名,功能模块,子模块,操作步骤,预期结果,测试结果
+P1,setting_password_idle_lock,设置,密码与安全,"步骤1: 点击 id:com.pudutech.business.function:id/btnSettings
+步骤2: 点击 密码与安全
+步骤3: 点击 电机锁
+步骤4: 设置开关 id:com.pudutech.business.function:id/idle_lock_switch 关闭
+步骤5: 点击 id:com.pudutech.business.function:id/idle_lock_switch
+步骤6: 循环5-5,10次","步骤1预期结果：可见 密码与安全
+步骤2预期结果：可见 电机锁
+步骤3预期结果：可见 id:com.pudutech.business.function:id/idle_lock_switch
+步骤4预期结果：开关关闭
+步骤5预期结果：开关切换
+步骤6预期结果：每次点击，开关状态都要发生切换",PASS
+P1,setting_map,设置,地图,"步骤1: 点击 id:com.pudutech.business.function:id/btnSettings
+步骤2: 点击 地图设置
+步骤3: 点击 编辑地图","步骤1预期结果：可见 地图设置
+步骤2预期结果：可见 编辑地图
+步骤3预期结果：可见 id:com.pudutech.business.function:id/et_pwd",PASS

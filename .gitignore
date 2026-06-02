@@ -6,6 +6,7 @@ __pycache__/
 *.pyc
 screenshots/
 .appium-inspector-session.json
+.appium-inspector-keepalive.pid
 .recording_session.json
 recording/
 capabilities.local.json

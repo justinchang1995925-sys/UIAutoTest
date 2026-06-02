@@ -19,67 +19,7 @@ from _lib.ui_runtime import run_steps  # noqa: E402
 
 DEFAULT_TIMEOUT = 15
 
-STEPS = [
-    {
-        "name": "Step 1 Tap id:com.pudutech.business.function:id/tvSettings",
-        "action": "tap",
-        "locator": {
-            "id": "com.pudutech.business.function:id/tvSettings"
-        },
-        "expect_visible": {
-            "android_uiautomator": "new UiSelector().resourceId(\"com.pudutech.business.function:id/tv_name\").text(\"密码与安全\")"
-        },
-        "expect_visible_locators_fallback": [
-            {
-                "android_uiautomator": "new UiSelector().text(\"密码与安全\")"
-            }
-        ]
-    },
-    {
-        "name": "Step 2 Tap 密码与安全",
-        "action": "tap",
-        "locator": {
-            "android_uiautomator": "new UiSelector().resourceId(\"com.pudutech.business.function:id/tv_name\").text(\"密码与安全\")"
-        },
-        "expect_visible": {
-            "id": "com.pudutech.business.function:id/tv_motorLockTab"
-        },
-        "locators_fallback": [
-            {
-                "android_uiautomator": "new UiSelector().text(\"密码与安全\")"
-            }
-        ],
-        "expect_visible_locators_fallback": [
-            {
-                "android_uiautomator": "new UiSelector().text(\"电机锁\")"
-            }
-        ]
-    },
-    {
-        "name": "Step 3 Tap 电机锁",
-        "action": "tap",
-        "locator": {
-            "id": "com.pudutech.business.function:id/tv_motorLockTab"
-        },
-        "expect_visible": {
-            "id": "com.pudutech.business.function:id/idle_lock_switch"
-        },
-        "locators_fallback": [
-            {
-                "android_uiautomator": "new UiSelector().text(\"电机锁\")"
-            }
-        ]
-    },
-    {
-        "name": "Step 4 set switch id:com.pudutech.business.function:id/idle_lock_switch 关闭",
-        "action": "set_switch",
-        "locator": {
-            "id": "com.pudutech.business.function:id/idle_lock_switch"
-        },
-        "state": "off",
-        "expect_switch": "off"
-    }
-]
+STEPS = [{'name': 'Step 1 Tap id:com.pudutech.business.function:id/btnSettings', 'action': 'tap', 'locator': {'id': 'com.pudutech.business.function:id/btnSettings'}, 'expect_visible': {'android_uiautomator': 'new UiSelector().resourceId("com.pudutech.business.function:id/tv_name").text("密码与安全")'}, 'expect_visible_locators_fallback': [{'android_uiautomator': 'new UiSelector().text("密码与安全")'}]}, {'name': 'Step 2 Tap 密码与安全', 'action': 'tap', 'locator': {'android_uiautomator': 'new UiSelector().resourceId("com.pudutech.business.function:id/tv_name").text("密码与安全")'}, 'expect_visible': {'id': 'com.pudutech.business.function:id/tv_motorLockTab'}, 'locators_fallback': [{'android_uiautomator': 'new UiSelector().text("密码与安全")'}], 'expect_visible_locators_fallback': [{'android_uiautomator': 'new UiSelector().text("电机锁")'}]}, {'name': 'Step 3 Tap 电机锁', 'action': 'tap', 'locator': {'id': 'com.pudutech.business.function:id/tv_motorLockTab'}, 'expect_visible': {'id': 'com.pudutech.business.function:id/idle_lock_switch'}, 'locators_fallback': [{'android_uiautomator': 'new UiSelector().text("电机锁")'}]}, {'name': 'Step 4 set switch id:com.pudutech.business.function:id/idle_lock_switch 关闭', 'action': 'set_switch', 'locator': {'id': 'com.pudutech.business.function:id/idle_lock_switch'}, 'state': 'off', 'expect_switch': 'off'}, {'name': 'Step 5 Tap id:com.pudutech.business.function:id/idle_lock_switch', 'action': 'tap', 'locator': {'id': 'com.pudutech.business.function:id/idle_lock_switch'}, 'expect_switch_toggle': True}, {'name': 'Loop steps 5-5', 'action': 'loop', 'from_step': 5, 'to_step': 5, 'times': 10, 'expect_switch_toggle': True}]
 
 
 @allure.suite('UI Automation')

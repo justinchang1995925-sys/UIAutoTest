@@ -77,6 +77,45 @@ python .cursor/skills/ui-auto-pytest-allure/scripts/import_cases_from_sheet.py c
 python .cursor/skills/ui-auto-pytest-allure/scripts/import_cases_from_sheet.py cases/import.csv --nl-only
 ```
 
+### 回写步骤号到 CSV（可选）
+
+如果希望 `import_template.csv` 本身也带上 `步骤1:` / `步骤2:` 前缀（并将「预期结果」也按相同编号补齐，缺失用 `-` 占位，方便一一对齐），可用：
+
+```bash
+python .cursor/skills/ui-auto-pytest-allure/scripts/import_cases_from_sheet.py cases/import_template.csv --rewrite-sheet
+```
+
+### 运行前自动导入（默认开启）
+
+执行 `python uiatest.py run ...` 时，会对比 `cases/import_template.csv` 的**用例内容指纹**（不含「测试结果」列）与 `.tools/import-template.sync.json`：
+
+- **用例内容有改动** → 自动执行导入，再跑用例  
+- **无改动**（仅更新了测试结果列）→ 跳过导入，直接 pytest  
+
+可选：在自动导入时回写 `步骤N:` 前缀，加 `--sheet-rewrite-on-sync`（等价于手动 `--rewrite-sheet`）。  
+
+关闭自动导入：`--skip-sheet-sync` 或环境变量 `UIATEST_SKIP_SHEET_SYNC=1`。  
+关闭自动回写步骤号：`--skip-sheet-rewrite` 或环境变量 `UIATEST_SKIP_SHEET_REWRITE=1`。  
+指定其它表格：`UIATEST_IMPORT_SHEET=cases/my_cases.csv`。
+
+### 用例执行顺序与结果回写（默认开启）
+
+`python uiatest.py run --priority P1` 时：
+
+1. **执行顺序**：按表格中的**行顺序**运行该优先级用例（不再按文件名字母序）。
+2. **结果回写**：跑完后在表格中写入或更新 **「测试结果」** 列，值为 `PASS`、`FAIL` 或 `SKIP`（仅更新本次运行的优先级对应行）。
+
+关闭结果回写：`--skip-sheet-results` 或 `UIATEST_SKIP_SHEET_RESULTS=1`。  
+写入前请**关闭 Excel 中打开的表格文件**，否则可能因文件占用而写入失败。
+
+### 入口页面（起始 Activity）覆盖（可选）
+
+若每条用例都需要从固定起始界面执行，建议在 `capabilities.local.json` 配置 `appium:appActivity`；也可以在运行时覆盖：
+
+```bash
+python uiatest.py run --priority P1 --start-activity com.example.MainActivity
+```
+
 Excel 需安装：
 
 ```bash
@@ -92,13 +131,13 @@ pip install openpyxl
 
 ## 测试报告（HTML）
 
-跑完用例后默认使用 **`allure serve`** 在浏览器打开报告（不要用 `file://` 直接打开 `index.html`）。
+跑完用例后默认 **`allure generate` → `allure open allure-report/<name>`** 在浏览器打开报告（不要用 `file://` 直接打开 `index.html`，也不要对 `allure-results/` 执行 `allure open`）。
 
 | 类型 | 路径 |
 |------|------|
 | 原始结果 | `allure-results/P1/` 或 `allure-results/single/` |
-| 在线报告 | 由 `allure serve` 自动打开 |
-| 静态副本（可选） | `allure-report/P1/`（需 `--static-report`） |
+| 在线报告 | `allure open allure-report/P1/` |
+| 静态 HTML | `allure-report/P1/`（runner 默认 generate 到此目录） |
 
 运行示例：
 

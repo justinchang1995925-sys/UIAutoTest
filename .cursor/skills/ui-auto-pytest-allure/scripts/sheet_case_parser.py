@@ -18,10 +18,26 @@ COLUMN_ALIASES: dict[str, tuple[str, ...]] = {
     "expected": ("预期结果", "期望结果", "expected", "预期", "校验"),
     "title": ("标题", "用例标题", "title"),
     "suite": ("套件", "suite"),
+    "result": ("测试结果", "test_result", "执行结果", "result"),
 }
 
+RESULT_COLUMN_DEFAULT = "测试结果"
+
 STEP_LINE_RE = re.compile(r"^步骤\s*(\d+)\s*[:：]\s*(.+)$", re.IGNORECASE)
+# When we rewrite CSV for alignment, expected lines may look like:
+#   步骤1预期结果：可见 xxx
+EXPECTED_LINE_RE = re.compile(r"^步骤\s*(\d+)\s*预期结果\s*[:：]\s*(.+)$", re.IGNORECASE)
 PRIORITY_RE = re.compile(r"^P?([0-4])$", re.IGNORECASE)
+
+
+def _strip_step_prefix(text: str) -> str:
+    """Strip step/expected numbering prefix repeatedly (idempotent)."""
+    value = text.strip()
+    while True:
+        match = EXPECTED_LINE_RE.match(value) or STEP_LINE_RE.match(value)
+        if not match:
+            return value
+        value = match.group(2).strip()
 
 
 def _normalize_header(value: str) -> str:
@@ -113,13 +129,14 @@ def _format_expected_lines(expected_text: str) -> list[str]:
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
-        lines.append(line)
+        # Allow expected results to be numbered like steps for alignment; strip prefixes.
+        lines.append(_strip_step_prefix(line))
     return lines
 
 
 def expected_line_to_step_suffix(line: str) -> str:
     """Convert one spreadsheet expected-result cell line to NL step suffix."""
-    text = line.strip()
+    text = _strip_step_prefix(line)
     if not text or text.lower() in {"-", "无", "空", "none", "n/a", "na", "跳过"}:
         return ""
 
@@ -145,6 +162,18 @@ def expected_line_to_step_suffix(line: str) -> str:
         if state.lower() in {"on", "open", "打开", "开启", "开"}:
             return "，期望开关打开"
         return "，期望开关关闭"
+
+    toggle_match = re.match(r"^(?:开关)?(?:切换|翻转|toggle|change)$", text, re.IGNORECASE)
+    if toggle_match:
+        return "，期望开关切换"
+
+    toggle_phrase_match = re.match(r"^开关状态要发生切换$", text.strip(), re.IGNORECASE)
+    if toggle_phrase_match:
+        return "，期望开关切换"
+
+    each_toggle_match = re.match(r"^每次点击[，,]?\s*开关状态都要发生切换$", text.strip(), re.IGNORECASE)
+    if each_toggle_match:
+        return "，期望出现 每次点击，开关状态都要发生切换"
 
     return f"，期望出现 {text}"
 

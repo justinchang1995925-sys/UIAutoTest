@@ -10,6 +10,6 @@
     "appium:uiautomator2ServerLaunchTimeout": 120000,
     "appium:uiautomator2ServerInstallTimeout": 120000,
     "appium:adbExecTimeout": 120000,
-    "appium:appPackage": "com.pudutech.business.function",
-    "appium:appActivity": "com.pudutech.function.homepage.ui.HomeActivity"
+    "appium:appPackage": "<YOUR_APP_PACKAGE>",
+    "appium:appActivity": "<YOUR_ENTRY_ACTIVITY>"
 }

@@ -41,12 +41,54 @@ def main() -> None:
     run_p.add_argument(
         "--fresh-results",
         action="store_true",
-        help="Clear allure-results for this run before pytest.",
+        help="Clear allure-results before pytest. Priority runs clear by default.",
     )
     run_p.add_argument(
         "--static-report",
         action="store_true",
-        help="Also generate static allure-report/ copy (default: allure serve only).",
+        help="Alias: HTML is always generated under allure-report/ (default report open).",
+    )
+    run_p.add_argument(
+        "--skip-sheet-sync",
+        action="store_true",
+        help="Skip auto-import when cases/import_template.csv changed.",
+    )
+    run_p.add_argument(
+        "--sheet-rewrite-on-sync",
+        action="store_true",
+        help="Rewrite CSV steps/expected with 步骤N: during auto-import sync.",
+    )
+    run_p.add_argument(
+        "--skip-sheet-rewrite",
+        action="store_true",
+        help="During auto-import sync, do not rewrite CSV with 步骤N:.",
+    )
+    run_p.add_argument(
+        "--auto-restore-inspector",
+        action="store_true",
+        help="Recreate Appium Inspector session after tests.",
+    )
+    run_p.add_argument(
+        "--skip-sheet-results",
+        action="store_true",
+        help="Do not write PASS/FAIL back to the import sheet after the run.",
+    )
+    run_p.add_argument(
+        "--skip-restore-inspector",
+        action="store_true",
+        help="Do not recreate Appium Inspector session after tests.",
+    )
+    run_p.add_argument("--start-package", help="Override entry appPackage (writes to capabilities.local.json).")
+    run_p.add_argument("--start-activity", help="Override entry appActivity (writes to capabilities.local.json).")
+    run_p.add_argument(
+        "--no-per-test-entry",
+        action="store_true",
+        help="Disable per-test entry activity reset (default: on when appActivity is configured).",
+    )
+    run_p.add_argument(
+        "--per-test-entry",
+        action="store_true",
+        help="Force per-test entry activity reset (requires appActivity configured).",
     )
     run_p.add_argument("pytest_args", nargs="*", help="Extra pytest args after '--'.")
 
@@ -57,6 +99,11 @@ def main() -> None:
     imp_p.add_argument("--dry-run", action="store_true")
     imp_p.add_argument("--nl-only", action="store_true")
     imp_p.add_argument("--skip-install", action="store_true")
+    imp_p.add_argument(
+        "--rewrite-sheet",
+        action="store_true",
+        help="(CSV only) Rewrite sheet in-place: prefix steps/expected with 步骤N: for alignment.",
+    )
     imp_p.add_argument("--no-resolve-locators", action="store_true")
     imp_p.add_argument("--udid", help="Device id for locator resolve.")
 
@@ -100,6 +147,11 @@ def main() -> None:
 
     rep_p = sub.add_parser("repair", help="Repair Appium/UiAutomator2 session; optionally open inspector.")
     rep_p.add_argument("--open-inspector", action="store_true")
+    rep_p.add_argument(
+        "--stop-inspector-keepalive",
+        action="store_true",
+        help="Stop inspector background keepalive only.",
+    )
 
     args = parser.parse_args()
 
@@ -125,6 +177,26 @@ def main() -> None:
             forward += ["--fresh-results"]
         if args.static_report:
             forward += ["--static-report"]
+        if args.skip_sheet_sync:
+            forward += ["--skip-sheet-sync"]
+        if args.sheet_rewrite_on_sync:
+            forward += ["--sheet-rewrite-on-sync"]
+        if args.skip_sheet_rewrite:
+            forward += ["--skip-sheet-rewrite"]
+        if args.skip_sheet_results:
+            forward += ["--skip-sheet-results"]
+        if args.skip_restore_inspector:
+            forward += ["--skip-restore-inspector"]
+        if args.auto_restore_inspector:
+            forward += ["--auto-restore-inspector"]
+        if args.start_package:
+            forward += ["--start-package", args.start_package]
+        if args.start_activity:
+            forward += ["--start-activity", args.start_activity]
+        if args.no_per_test_entry:
+            forward += ["--no-per-test-entry"]
+        if args.per_test_entry:
+            forward += ["--per-test-entry"]
         if args.request:
             forward = [args.request, *forward]
         forward += list(args.pytest_args)
@@ -138,6 +210,8 @@ def main() -> None:
             forward.append("--nl-only")
         if args.skip_install:
             forward.append("--skip-install")
+        if args.rewrite_sheet:
+            forward.append("--rewrite-sheet")
         if args.no_resolve_locators:
             forward.append("--no-resolve-locators")
         if args.udid:
@@ -198,6 +272,8 @@ def main() -> None:
         forward = []
         if args.open_inspector:
             forward += ["--open-inspector"]
+        if args.stop_inspector_keepalive:
+            forward += ["--stop-keepalive"]
         raise SystemExit(_run("repair_appium_session.py", forward))
 
 
