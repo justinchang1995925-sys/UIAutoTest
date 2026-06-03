@@ -147,7 +147,7 @@ Recommended: **预期结果** (per-step post assertions).
 python uiatest.py import cases/your_cases.csv
 ```
 
-See [docs/CASE_IMPORT.md](../../../docs/CASE_IMPORT.md) and `cases/import_template.csv`.
+See [docs/CASE_IMPORT.md](../../../docs/CASE_IMPORT.md), [docs/ARCHITECTURE.md](../../../docs/ARCHITECTURE.md), and `cases/import_template.csv`.
 
 ### Auto-sync before run
 

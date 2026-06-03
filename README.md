@@ -230,6 +230,7 @@ A: 手机上允许 USB 调试，执行 `adb kill-server` 后 `adb devices`。
 
 ## 相关文档
 
+- [架构与实现原理](docs/ARCHITECTURE.md)
 - [手动使用指南（不依赖 Agent）](docs/MANUAL_USAGE.md)
 - [表格批量导入](docs/CASE_IMPORT.md)
 - [技能与脚本说明](.cursor/skills/ui-auto-pytest-allure/SKILL.md)
