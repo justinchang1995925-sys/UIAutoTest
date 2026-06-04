@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -81,6 +82,11 @@ def main() -> None:
         help="Overwrite existing scaffold files (e.g. conftest, uiatest.py).",
     )
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--with-setup",
+        action="store_true",
+        help="After scaffold copy, run install_ui_dependencies.py (pip + Allure + Appium stack).",
+    )
     args = parser.parse_args()
 
     target = _resolve_target(args.target)
@@ -105,10 +111,31 @@ def main() -> None:
     if uiatest.is_file():
         print("\nNext steps:")
         print(f"  cd {target}")
-        print("  python uiatest.py doctor")
-        print("  # Edit capabilities.template.json (appPackage / appActivity / udid)")
+        if not args.with_setup:
+            print("  python uiatest.py setup          # pip + Allure + Appium (needs Node.js/npm)")
+        print("  # Edit capabilities.template.json (appPackage / appActivity — required)")
+        print("  python uiatest.py doctor         # connect Android device first")
         print("  python uiatest.py gen cases/template.nl")
         print("  python uiatest.py run --priority P1")
+        print("\nSee: .cursor/skills/ui-auto-pytest-allure/scaffold/QUICKSTART.md")
+
+    if args.with_setup and not args.dry_run:
+        installer = SKILL_DIR / "scripts" / "install_ui_dependencies.py"
+        if installer.is_file():
+            print("\nRunning environment setup (uiatest setup)...")
+            result = subprocess.run(
+                [sys.executable, str(installer)],
+                cwd=str(target),
+                check=False,
+            )
+            if result.returncode != 0:
+                print(
+                    "Setup exited with errors. Install Node.js LTS if npm is missing, "
+                    "then run: python uiatest.py setup",
+                    file=sys.stderr,
+                )
+        else:
+            print(f"Warning: installer not found: {installer}", file=sys.stderr)
 
 
 if __name__ == "__main__":

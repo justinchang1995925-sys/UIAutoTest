@@ -2,3 +2,4 @@ pytest
 allure-pytest
 Appium-Python-Client
 selenium
+openpyxl

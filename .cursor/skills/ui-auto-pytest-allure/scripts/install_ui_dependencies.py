@@ -58,6 +58,9 @@ def main() -> None:
     install_requirements(requirements_path)
     print(f"Installed dependencies from {requirements_path}")
 
+    print("Installing optional sheet import dependency (openpyxl)...")
+    subprocess.run([sys.executable, "-m", "pip", "install", "openpyxl"], check=False)
+
     print("Installing Allure CLI into project .tools/ ...")
     try:
         ensure_allure_cli(PROJECT_ROOT)

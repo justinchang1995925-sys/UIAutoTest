@@ -22,14 +22,23 @@ Author cases in `.nl` files or CSV/Excel sheets — **not** by tapping the devic
 Recipient copies **`ui-auto-pytest-allure`** to their project at `.cursor/skills/ui-auto-pytest-allure/`, then runs **once**:
 
 ```bash
-python .cursor/skills/ui-auto-pytest-allure/scripts/uiatest_init.py
-python uiatest.py setup
+python .cursor/skills/ui-auto-pytest-allure/scripts/uiatest_init.py --with-setup
 python uiatest.py doctor
 ```
 
 **Prerequisites on the recipient machine:** Python 3.10+, **Node.js LTS (npm)**, adb, Android device USB debugging.
 
-If the user asks to **initialize / 初始化** a UI automation project, run `uiatest_init.py` (or `python uiatest.py init` after scaffold exists). Full steps: [DISTRIBUTION.md](DISTRIBUTION.md).
+**Recipient checklist (Agent must follow on a new machine):**
+
+| Step | Command | Blocking if skipped |
+|------|---------|---------------------|
+| 1 | Copy skill to `.cursor/skills/ui-auto-pytest-allure/` | Yes |
+| 2 | `uiatest_init.py --with-setup` or `uiatest init --with-setup` | Yes (no CLI/scaffold) |
+| 3 | Edit `capabilities.template.json` (real appPackage/appActivity) | Yes (tests cannot launch app) |
+| 4 | `python uiatest.py doctor` | Yes if FAIL on npm/Appium CLI/Python |
+| 5 | `gen` / `import` / `run` | — |
+
+If the user asks to **initialize / 初始化** a UI automation project, run init with `--with-setup` when npm is available. Full steps: [DISTRIBUTION.md](DISTRIBUTION.md) and [scaffold/QUICKSTART.md](scaffold/QUICKSTART.md).
 
 ## Agent first-run protocol (skill recipients)
 
@@ -68,7 +77,7 @@ python uiatest.py init
 
 | Subcommand | Purpose |
 |------------|---------|
-| `init` | Bootstrap project from `scaffold/` (skill-only setup) |
+| `init` | Bootstrap scaffold; use `--with-setup` on first machine |
 | `setup` | **One-shot env install** (pip + Allure + Appium stack; needs npm) |
 | `run` | Run by NL, `--priority`, or `--test` |
 | `import` | CSV/XLSX → `.nl` + spec + pytest |

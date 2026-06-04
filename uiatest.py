@@ -17,7 +17,15 @@ SKILL_DIR = PROJECT_ROOT / ".cursor" / "skills" / "ui-auto-pytest-allure" / "scr
 def _run(script: str, args: list[str]) -> int:
     path = SKILL_DIR / script
     if not path.exists():
-        raise SystemExit(f"Missing script: {path}")
+        skill_root = PROJECT_ROOT / ".cursor" / "skills" / "ui-auto-pytest-allure"
+        raise SystemExit(
+            f"Missing skill script: {path}\n\n"
+            "Skill-only setup:\n"
+            f"  1. Copy folder ui-auto-pytest-allure to: {skill_root}\n"
+            "  2. Run: python .cursor/skills/ui-auto-pytest-allure/scripts/uiatest_init.py\n"
+            "  3. Run: python uiatest.py setup\n"
+            "See: .cursor/skills/ui-auto-pytest-allure/DISTRIBUTION.md"
+        )
     return subprocess.call([sys.executable, str(path), *args], cwd=str(PROJECT_ROOT))
 
 
@@ -124,6 +132,11 @@ def main() -> None:
     init_p.add_argument("--target", type=Path, default=None, help="Project root directory.")
     init_p.add_argument("--force", action="store_true", help="Overwrite existing scaffold files.")
     init_p.add_argument("--dry-run", action="store_true")
+    init_p.add_argument(
+        "--with-setup",
+        action="store_true",
+        help="After copying scaffold, run python uiatest.py setup (pip + Allure + Appium).",
+    )
 
     sub.add_parser("doctor", help="Preflight: deps, adb, Appium, capabilities, Allure.")
 
@@ -254,7 +267,10 @@ def main() -> None:
             forward.append("--force")
         if args.dry_run:
             forward.append("--dry-run")
-        raise SystemExit(_run("uiatest_init.py", forward))
+        if args.with_setup:
+            forward.append("--with-setup")
+        code = _run("uiatest_init.py", forward)
+        raise SystemExit(code)
 
     if args.cmd == "doctor":
         raise SystemExit(_run("uiatest_doctor.py", []))

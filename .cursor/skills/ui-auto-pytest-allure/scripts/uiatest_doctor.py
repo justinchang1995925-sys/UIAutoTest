@@ -29,65 +29,106 @@ REQUIRED_MODULES = (
     "selenium",
 )
 
+PLACEHOLDER_PACKAGES = {
+    "com.yourcompany.yourapp",
+    "your.app.package",
+}
+PLACEHOLDER_ACTIVITIES = {
+    "com.yourcompany.yourapp.mainactivity",
+    "your.app.mainactivity",
+}
 
-def _check_python_modules() -> list[str]:
-    issues: list[str] = []
+
+def _check_python_modules() -> tuple[list[str], list[str]]:
+    errors: list[str] = []
+    warnings: list[str] = []
     for name in REQUIRED_MODULES:
         if importlib.util.find_spec(name) is None:
-            issues.append(f"Missing Python package: {name}")
+            errors.append(f"Missing Python package: {name} — run: python uiatest.py setup")
     if importlib.util.find_spec("openpyxl") is None:
-        issues.append("Missing openpyxl (needed for .xlsx import): pip install openpyxl")
-    return issues
+        warnings.append("Missing openpyxl (only needed for .xlsx import) — run: python uiatest.py setup")
+    return errors, warnings
 
 
-def _check_adb() -> list[str]:
-    issues: list[str] = []
+def _check_skill_layout() -> tuple[list[str], list[str]]:
+    errors: list[str] = []
+    skill_md = PROJECT_ROOT / ".cursor" / "skills" / "ui-auto-pytest-allure" / "SKILL.md"
+    scripts = PROJECT_ROOT / ".cursor" / "skills" / "ui-auto-pytest-allure" / "scripts"
+    if not skill_md.is_file():
+        errors.append(
+            "Skill folder missing. Copy ui-auto-pytest-allure to "
+            ".cursor/skills/ui-auto-pytest-allure/ then run uiatest_init.py"
+        )
+    elif not scripts.is_dir():
+        errors.append(f"Skill scripts directory missing: {scripts}")
+    else:
+        print(f"  skill: {skill_md.parent.name}")
+    return errors, []
+
+
+def _check_uiatest_entry() -> tuple[list[str], list[str]]:
+    errors: list[str] = []
+    cli = PROJECT_ROOT / "uiatest.py"
+    if not cli.is_file():
+        errors.append(
+            "uiatest.py not found in project root. Run: "
+            "python .cursor/skills/ui-auto-pytest-allure/scripts/uiatest_init.py"
+        )
+    else:
+        print(f"  CLI: {cli.name}")
+    return errors, []
+
+
+def _check_adb() -> tuple[list[str], list[str]]:
+    errors: list[str] = []
+    warnings: list[str] = []
     try:
         adb = resolve_adb()
     except RuntimeError as exc:
-        issues.append(str(exc))
-        return issues
+        errors.append(str(exc))
+        return errors, warnings
     devices = list_authorized_devices()
     if not devices:
-        issues.append("No authorized Android device (adb devices shows none in 'device' state).")
+        warnings.append(
+            "No authorized Android device yet. Connect USB, allow debugging, then re-run doctor."
+        )
     elif len(devices) > 1:
-        issues.append(
-            f"Multiple devices connected ({', '.join(devices)}). "
-            "Set --device or capabilities.local.json appium:udid."
+        warnings.append(
+            f"Multiple devices ({', '.join(devices)}). Set --device or appium:udid in capabilities.local.json."
         )
     else:
         print(f"  adb: {adb}")
         print(f"  device: {devices[0]}")
-    return issues
+    return errors, warnings
 
 
-def _check_node_npm() -> list[str]:
-    issues: list[str] = []
+def _check_node_npm() -> tuple[list[str], list[str]]:
+    errors: list[str] = []
     if not shutil.which("npm"):
-        issues.append(
+        errors.append(
             "npm is not in PATH. Install Node.js LTS from https://nodejs.org/ "
             "then run: python uiatest.py setup"
         )
     else:
         print("  npm: available")
-    return issues
+    return errors, []
 
 
-def _check_appium_cli() -> list[str]:
-    issues: list[str] = []
+def _check_appium_cli() -> tuple[list[str], list[str]]:
+    errors: list[str] = []
     appium_cmd = _which_appium()
     if not appium_cmd:
-        issues.append(
+        errors.append(
             "Appium CLI not found. Run: python uiatest.py setup "
             "(or: npm install -g appium && appium driver install uiautomator2)"
         )
     else:
         print(f"  appium: {appium_cmd}")
-    return issues
+    return errors, []
 
 
-def _check_appium_server() -> list[str]:
-    issues: list[str] = []
+def _check_appium_server() -> tuple[list[str], list[str]]:
+    warnings: list[str] = []
     port_open = False
     try:
         with socket.create_connection(("127.0.0.1", 4723), timeout=2):
@@ -95,19 +136,19 @@ def _check_appium_server() -> list[str]:
     except OSError:
         port_open = False
     if not port_open:
-        issues.append(
-            "Port 4723 is not open (Appium server not listening). "
-            "It will auto-start on first test run if Appium CLI is installed."
+        warnings.append(
+            "Appium server not running on :4723 (OK — it auto-starts on first test run)."
         )
     elif not is_appium_ready():
-        issues.append("Appium port is open but /status is not ready.")
+        warnings.append("Port 4723 is open but Appium /status is not ready.")
     else:
         print("  Appium server: ready at http://127.0.0.1:4723")
-    return issues
+    return [], warnings
 
 
-def _check_capabilities() -> list[str]:
-    issues: list[str] = []
+def _check_capabilities() -> tuple[list[str], list[str]]:
+    errors: list[str] = []
+    warnings: list[str] = []
     candidates = [
         PROJECT_ROOT / "capabilities.local.json",
         PROJECT_ROOT / "capabilities.json",
@@ -115,55 +156,69 @@ def _check_capabilities() -> list[str]:
     ]
     path = next((item for item in candidates if item.exists()), None)
     if path is None:
-        issues.append("No capabilities file found (expected capabilities.local.json or template).")
-        return issues
+        errors.append("No capabilities file found. Run uiatest init or add capabilities.template.json.")
+        return errors, warnings
     try:
         caps = json.loads(path.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError as exc:
-        issues.append(f"Invalid JSON in {path.name}: {exc}")
-        return issues
+        errors.append(f"Invalid JSON in {path.name}: {exc}")
+        return errors, warnings
+
+    print(f"  capabilities: {path.name}")
     udid = str(caps.get("appium:udid") or caps.get("udid") or "").strip()
-    if not udid or udid == "<ANDROID_UDID>":
-        issues.append(
-            f"{path.name} has placeholder udid. Connect a device and run tests once, "
-            "or edit capabilities.local.json."
+    if not udid or udid.upper() == "<ANDROID_UDID>":
+        warnings.append(
+            f"{path.name}: udid is placeholder. Connect device and run once, or set appium:udid."
         )
-    package = str(caps.get("appium:appPackage") or caps.get("appPackage") or "").strip()
+    package = str(caps.get("appium:appPackage") or caps.get("appPackage") or "").strip().lower()
+    activity = str(caps.get("appium:appActivity") or caps.get("appActivity") or "").strip().lower()
     if not package:
-        issues.append(f"{path.name} missing appium:appPackage.")
-    return issues
-
-
-def _check_allure() -> list[str]:
-    issues: list[str] = []
-    if not resolve_allure_command(PROJECT_ROOT, auto_install=False):
-        issues.append(
-            "Allure CLI not found. Run: python .cursor/skills/ui-auto-pytest-allure/scripts/install_allure_cli.py"
+        errors.append(f"{path.name} missing appium:appPackage.")
+    elif package in PLACEHOLDER_PACKAGES or "yourcompany" in package or "your.app" in package:
+        errors.append(
+            f"{path.name} still has placeholder appPackage ({package}). "
+            "Edit to your real application id before running tests."
         )
-        return issues
-    print("  reports: use allure open allure-report/<name> (not allure-results/)")
-    return issues
+    if not activity:
+        errors.append(f"{path.name} missing appium:appActivity.")
+    elif activity in PLACEHOLDER_ACTIVITIES or "yourcompany" in activity or "your.app" in activity:
+        errors.append(
+            f"{path.name} still has placeholder appActivity. "
+            "Edit to your real launcher/home activity."
+        )
+    return errors, warnings
 
 
-def _check_scaffold_sync() -> list[str]:
+def _check_allure() -> tuple[list[str], list[str]]:
+    errors: list[str] = []
+    if not resolve_allure_command(PROJECT_ROOT, auto_install=False):
+        errors.append("Allure CLI not found. Run: python uiatest.py setup")
+        return errors, []
+    print("  reports: allure open allure-report/<name>")
+    return errors, []
+
+
+def _check_scaffold_sync() -> tuple[list[str], list[str]]:
     root_cli = PROJECT_ROOT / "uiatest.py"
     scaffold_cli = PROJECT_ROOT / ".cursor" / "skills" / "ui-auto-pytest-allure" / "scaffold" / "uiatest.py"
     if not scaffold_cli.is_file() or not root_cli.is_file():
-        return []
+        return [], []
     if root_cli.read_bytes() != scaffold_cli.read_bytes():
-        return ["uiatest.py differs from scaffold/uiatest.py — copy root uiatest.py to scaffold for distribution."]
-    return []
+        return [], [
+            "uiatest.py differs from skill scaffold — run: python uiatest.py init --force (backup custom edits first)"
+        ]
+    return [], []
 
 
-def _check_import_sheet() -> list[str]:
+def _check_import_sheet() -> tuple[list[str], list[str]]:
     sheet = sheet_import_path(PROJECT_ROOT)
     if sheet.is_file():
-        return []
-    return [f"Import sheet not found: {sheet.relative_to(PROJECT_ROOT)}"]
+        print(f"  import sheet: {sheet.relative_to(PROJECT_ROOT)}")
+        return [], []
+    return [], [f"Optional import sheet missing: {sheet.relative_to(PROJECT_ROOT)} (only needed for CSV batch)"]
 
 
-def _check_inspector() -> list[str]:
-    issues: list[str] = []
+def _check_inspector() -> tuple[list[str], list[str]]:
     if is_keepalive_running(PROJECT_ROOT):
         print("  inspector keepalive: running")
     else:
@@ -171,12 +226,14 @@ def _check_inspector() -> list[str]:
     info = load_session_info(PROJECT_ROOT)
     if info and info.get("session_id"):
         print(f"  saved inspector session: {info.get('session_id')}")
-    return issues
+    return [], []
 
 
 def main() -> None:
     print(f"UIAutoTest doctor — project root: {PROJECT_ROOT}\n")
-    sections = [
+    sections: list[tuple[str, tuple[list[str], list[str]]]] = [
+        ("Skill layout", _check_skill_layout()),
+        ("CLI entry (uiatest.py)", _check_uiatest_entry()),
         ("Python packages", _check_python_modules()),
         ("Node.js / npm", _check_node_npm()),
         ("Appium CLI", _check_appium_cli()),
@@ -188,20 +245,31 @@ def main() -> None:
         ("Import sheet", _check_import_sheet()),
         ("Inspector", _check_inspector()),
     ]
-    failed = 0
-    for title, issues in sections:
-        if issues:
-            failed += len(issues)
+    error_count = 0
+    warn_count = 0
+    for title, (errors, warnings) in sections:
+        if errors:
+            error_count += len(errors)
             print(f"[FAIL] {title}")
-            for item in issues:
+            for item in errors:
+                print(f"  - {item}")
+        elif warnings:
+            warn_count += len(warnings)
+            print(f"[WARN] {title}")
+            for item in warnings:
                 print(f"  - {item}")
         else:
             print(f"[ OK ] {title}")
+
     print()
-    if failed:
-        print(f"Doctor found {failed} issue(s). Fix the items above before running UI tests.")
+    if error_count:
+        print(f"Doctor: {error_count} blocking issue(s), {warn_count} warning(s).")
+        print("Fix FAIL items, then: python uiatest.py doctor")
         raise SystemExit(1)
-    print("All checks passed. You can run: python uiatest.py run \"运行P1测试用例\"")
+    if warn_count:
+        print(f"Doctor: ready with {warn_count} warning(s). You can run tests when device/caps are set.")
+    else:
+        print("All checks passed. You can run: python uiatest.py run \"运行P1测试用例\"")
 
 
 if __name__ == "__main__":

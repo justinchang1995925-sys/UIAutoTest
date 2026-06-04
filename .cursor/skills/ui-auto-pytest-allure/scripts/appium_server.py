@@ -426,3 +426,32 @@ def set_capabilities_app_entry(
             f"appPackage={caps.get('appium:appPackage','')!r}, "
             f"appActivity={caps.get('appium:appActivity','')!r}"
         )
+
+
+_PLACEHOLDER_PACKAGES = {"com.yourcompany.yourapp", "your.app.package"}
+
+
+def guard_capabilities_configured(project_root: Path) -> None:
+    """Fail fast if capabilities still contain scaffold placeholders."""
+    for name in ("capabilities.local.json", "capabilities.json", "capabilities.template.json"):
+        path = project_root / name
+        if not path.is_file():
+            continue
+        try:
+            caps = json.loads(path.read_text(encoding="utf-8-sig"))
+        except json.JSONDecodeError:
+            continue
+        package = str(caps.get("appium:appPackage") or caps.get("appPackage") or "").strip().lower()
+        activity = str(caps.get("appium:appActivity") or caps.get("appActivity") or "").strip().lower()
+        if not package or package in _PLACEHOLDER_PACKAGES or "yourcompany" in package:
+            raise SystemExit(
+                f"{name} still has placeholder appPackage. "
+                "Edit appium:appPackage / appium:appActivity to your real app, then retry.\n"
+                "  python uiatest.py doctor"
+            )
+        if not activity or "yourcompany" in activity or "your.app" in activity:
+            raise SystemExit(
+                f"{name} still has placeholder appActivity. "
+                "Set your real launcher activity (e.g. .HomeActivity), then retry."
+            )
+        return

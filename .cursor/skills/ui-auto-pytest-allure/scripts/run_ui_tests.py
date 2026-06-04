@@ -20,6 +20,7 @@ from appium_server import _which_appium  # noqa: E402
 from appium_server import (  # noqa: E402
     connect_device,
     ensure_appium_server,
+    guard_capabilities_configured,
     set_capabilities_app_entry,
     set_capabilities_device_id,
     sync_capabilities_device,
@@ -700,6 +701,7 @@ def main() -> None:
     args = parser.parse_args()
 
     ensure_dependencies(args.skip_install)
+    guard_capabilities_configured(PROJECT_ROOT)
 
     test_root = Path(args.test_root)
     allure_root = Path(args.allure_root)

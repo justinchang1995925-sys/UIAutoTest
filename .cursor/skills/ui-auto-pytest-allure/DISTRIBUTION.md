@@ -25,8 +25,16 @@
 在**项目根目录**打开终端（该目录将存放 `cases/`、`uiatest.py` 等）：
 
 ```powershell
-python .cursor/skills/ui-auto-pytest-allure/scripts/uiatest_init.py
+python .cursor/skills/ui-auto-pytest-allure/scripts/uiatest_init.py --with-setup
 ```
+
+或已有 `uiatest.py` 后：
+
+```powershell
+python uiatest.py init --with-setup
+```
+
+`--with-setup` 会在复制脚手架后自动执行 `setup`（pip + Allure + Appium）。
 
 初始化完成后根目录会出现：
 
@@ -82,8 +90,9 @@ python uiatest.py run --priority P1
 ## 在 Cursor 里用 Agent（可选）
 
 1. 用 Cursor 打开已复制 Skill 的项目文件夹  
-2. 对 Agent 说：**「初始化 UI 自动化项目」** — Agent 应执行上面的 `uiatest_init.py`  
-3. 之后可用自然语言：**「生成 P1 用例 …」「运行 P1 测试用例」**
+2. 对 Agent 说：**「用 init --with-setup 初始化 UI 自动化项目」**  
+3. 再说：**「doctor 检查环境」** — 必须通过 FAIL 项（WARN 可暂忽略）  
+4. 之后：**「生成 P1 用例 …」「运行 P1 测试用例」**
 
 Skill 的 `SKILL.md` 会指导 Agent 调用 `uiatest.py`，无需完整仓库。
 
