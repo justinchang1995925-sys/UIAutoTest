@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -126,6 +127,16 @@ def main() -> None:
 
     sub.add_parser("doctor", help="Preflight: deps, adb, Appium, capabilities, Allure.")
 
+    setup_p = sub.add_parser(
+        "setup",
+        help="One-shot install: Python deps, Allure CLI, Appium + uiautomator2 driver (requires Node.js/npm).",
+    )
+    setup_p.add_argument(
+        "--skip-appium",
+        action="store_true",
+        help="Only install Python packages and Allure CLI.",
+    )
+
     clean_p = sub.add_parser("clean", help="Remove allure-results/report and optional logs.")
     clean_p.add_argument("--results", action="store_true")
     clean_p.add_argument("--report", action="store_true")
@@ -247,6 +258,11 @@ def main() -> None:
 
     if args.cmd == "doctor":
         raise SystemExit(_run("uiatest_doctor.py", []))
+
+    if args.cmd == "setup":
+        if args.skip_appium:
+            os.environ["UIATEST_SKIP_APPIUM_INSTALL"] = "1"
+        raise SystemExit(_run("install_ui_dependencies.py", []))
 
     if args.cmd == "clean":
         forward: list[str] = []

@@ -39,11 +39,18 @@ python .cursor/skills/ui-auto-pytest-allure/scripts/uiatest_init.py
 
 ### 3. 环境与首次运行
 
+**一键安装（推荐，需已安装 Node.js LTS）：**
+
 ```powershell
+python uiatest.py setup
 python uiatest.py doctor
 ```
 
-按提示安装 Python 依赖、连接 Android 设备，编辑 `capabilities.template.json`（或运行后自动生成的 `capabilities.local.json`）中的：
+`setup` 会自动：pip 安装 pytest/Appium 客户端、项目内 Allure CLI、**npm 全局 Appium + uiautomator2 驱动**。
+
+若 `doctor` 提示缺少 npm，请先安装 Node.js：https://nodejs.org/  ，安装后**重新打开终端**再执行 `setup`。
+
+按 `doctor` 提示连接 Android 设备，编辑 `capabilities.template.json`（或运行后自动生成的 `capabilities.local.json`）中的：
 
 - `appium:appPackage` / `appium:appActivity`  
 - `appium:udid`（或连接设备后由 `inspect` / 运行脚本写入 local 文件）
@@ -88,13 +95,16 @@ Skill 的 `SKILL.md` 会指导 Agent 调用 `uiatest.py`，无需完整仓库。
 |------|------|
 | Skill 目录 | 含 `scripts/`、`scaffold/`、`SKILL.md` |
 | 一次 `init` | 从 `scaffold/` 展开运行时代码与 CLI |
-| 本机环境 | Python 3.10+、Node/Appium、adb、Android 设备 |
+| 本机环境 | Python 3.10+、**Node.js/npm**、adb、Android 设备已授权 |
 
 `init` 之后项目可独立提交到对方自己的 Git 仓库；`capabilities.local.json` 建议加入 `.gitignore`（脚手架已包含）。
 
 ---
 
 ## 常见问题
+
+**Q: Agent 生成用例成功，但运行报 `Appium is not installed`？**  
+A: Skill 只包含 Python 脚本，**不会自带 Appium 可执行文件**。对方机器需安装 Node.js，并执行 `python uiatest.py setup`（或手动 `npm install -g appium` + `appium driver install uiautomator2`）。Agent 首次在该机器跑用例前应先 `setup` + `doctor`。
 
 **Q: 只复制了 skill，运行 `uiatest.py` 报错找不到？**  
 A: 先执行 `uiatest_init.py`，或 `python uiatest.py init`（需已有 `uiatest.py` 时；首次用 init 脚本路径）。

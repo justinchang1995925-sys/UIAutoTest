@@ -66,6 +66,17 @@ def main() -> None:
         print("You can retry with:")
         print("  python .cursor/skills/ui-auto-pytest-allure/scripts/install_allure_cli.py")
 
+    if os.getenv("UIATEST_SKIP_APPIUM_INSTALL", "").lower() not in {"1", "true", "yes"}:
+        try:
+            from install_appium_stack import install_appium_stack  # noqa: WPS433
+
+            install_appium_stack()
+        except SystemExit:
+            raise
+        except Exception as exc:
+            print(f"Warning: Appium stack install failed: {exc}")
+            print("Install Node.js LTS, then run: python uiatest.py setup")
+
     print("Run tests with pytest, for example:")
     print("  python -m pytest generated-tests/ui/P1 -m P1 --alluredir=allure-results/P1")
 

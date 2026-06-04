@@ -16,7 +16,7 @@ PRIORITIES = {"P0", "P1", "P2", "P3", "P4"}
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from allure_cli import augmented_path_env, resolve_allure_command  # noqa: E402
+from appium_server import _which_appium  # noqa: E402
 from appium_server import (  # noqa: E402
     connect_device,
     ensure_appium_server,
@@ -24,6 +24,7 @@ from appium_server import (  # noqa: E402
     set_capabilities_device_id,
     sync_capabilities_device,
 )
+from allure_cli import augmented_path_env, resolve_allure_command  # noqa: E402
 from project_paths import resolve_project_root  # noqa: E402
 from sheet_import_sync import maybe_sync_sheet_import, sheet_import_path  # noqa: E402
 from sheet_run_order import ordered_test_paths_for_priority  # noqa: E402
@@ -183,8 +184,11 @@ def _python_deps_satisfied() -> bool:
 def ensure_dependencies(skip_install: bool) -> None:
     if skip_install:
         return
-    if _python_deps_satisfied() and resolve_allure_command(PROJECT_ROOT, auto_install=False):
-        print("Python dependencies and Allure CLI are ready; skipping install.")
+    py_ok = _python_deps_satisfied()
+    allure_ok = bool(resolve_allure_command(PROJECT_ROOT, auto_install=False))
+    appium_ok = _which_appium() is not None
+    if py_ok and allure_ok and appium_ok:
+        print("Python dependencies, Allure CLI, and Appium CLI are ready; skipping install.")
         return
     installer = SCRIPT_DIR / "install_ui_dependencies.py"
     print("Checking and installing UI test dependencies...")

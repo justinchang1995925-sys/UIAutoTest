@@ -37,8 +37,75 @@ def is_appium_ready(server_url: str = DEFAULT_SERVER_URL) -> bool:
         return False
 
 
+def _npm_global_bin_dirs() -> list[Path]:
+    dirs: list[Path] = []
+    try:
+        result = subprocess.run(
+            ["npm", "prefix", "-g"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        if result.returncode == 0:
+            prefix = result.stdout.strip()
+            if prefix:
+                dirs.append(Path(prefix))
+                dirs.append(Path(prefix) / "bin")
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    appdata = os.environ.get("APPDATA", "").strip()
+    if appdata:
+        dirs.append(Path(appdata) / "npm")
+    return dirs
+
+
 def _which_appium() -> str | None:
-    return shutil.which("appium")
+    env = os.environ.copy()
+    for directory in _npm_global_bin_dirs():
+        if directory.is_dir():
+            env["PATH"] = f"{directory}{os.pathsep}{env.get('PATH', '')}"
+    return shutil.which("appium", path=env.get("PATH")) or shutil.which("appium")
+
+
+def ensure_appium_cli(auto_install: bool = True) -> str:
+    """Return appium executable path; optionally run install_appium_stack.py."""
+    appium_cmd = _which_appium()
+    if appium_cmd:
+        return appium_cmd
+
+    if not auto_install or os.getenv("UIATEST_SKIP_APPIUM_INSTALL", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }:
+        raise SystemExit(
+            "Appium CLI is not installed or not in PATH.\n"
+            "Prerequisites: Node.js LTS (includes npm).\n"
+            "Fix (recommended):\n"
+            "  python uiatest.py setup\n"
+            "Or manually:\n"
+            "  npm install -g appium\n"
+            "  appium driver install uiautomator2\n"
+            "Then reopen the terminal and run: python uiatest.py doctor"
+        )
+
+    installer = Path(__file__).resolve().parent / "install_appium_stack.py"
+    print("Appium CLI not found; installing Appium stack (npm)...")
+    result = subprocess.run([sys.executable, str(installer)], check=False)
+    if result.returncode != 0:
+        raise SystemExit(
+            "Automatic Appium install failed. Install Node.js from https://nodejs.org/ "
+            "then run: python uiatest.py setup"
+        )
+
+    appium_cmd = _which_appium()
+    if not appium_cmd:
+        raise SystemExit(
+            "Appium was installed but is still not in PATH for this shell.\n"
+            "Close and reopen the terminal, then run: python uiatest.py doctor"
+        )
+    return appium_cmd
 
 
 def _configure_android_env(env: dict[str, str], project_root: Path) -> dict[str, str]:
@@ -53,11 +120,7 @@ def start_appium_server(
     project_root: Path,
     server_url: str = DEFAULT_SERVER_URL,
 ) -> subprocess.Popen | None:
-    appium_cmd = _which_appium()
-    if not appium_cmd:
-        raise SystemExit(
-            "Appium is not installed. Install Node.js, then run: npm install -g appium"
-        )
+    appium_cmd = ensure_appium_cli(auto_install=True)
 
     host, port = parse_server_url(server_url)
     env = _configure_android_env(os.environ.copy(), project_root)

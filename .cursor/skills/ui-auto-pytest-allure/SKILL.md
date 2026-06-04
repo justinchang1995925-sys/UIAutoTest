@@ -23,10 +23,26 @@ Recipient copies **`ui-auto-pytest-allure`** to their project at `.cursor/skills
 
 ```bash
 python .cursor/skills/ui-auto-pytest-allure/scripts/uiatest_init.py
+python uiatest.py setup
 python uiatest.py doctor
 ```
 
+**Prerequisites on the recipient machine:** Python 3.10+, **Node.js LTS (npm)**, adb, Android device USB debugging.
+
 If the user asks to **initialize / 初始化** a UI automation project, run `uiatest_init.py` (or `python uiatest.py init` after scaffold exists). Full steps: [DISTRIBUTION.md](DISTRIBUTION.md).
+
+## Agent first-run protocol (skill recipients)
+
+When the project was set up from **skill-only** distribution, **before the first `uiatest run`** on a new machine:
+
+1. If `uiatest.py` is missing → `python .cursor/skills/ui-auto-pytest-allure/scripts/uiatest_init.py`
+2. **Always** run `python uiatest.py setup` (installs pip deps, Allure CLI, Appium + uiautomator2 via npm)
+3. Run `python uiatest.py doctor` — if it fails, fix reported items (Node.js, adb, capabilities) before `run`
+4. Only then `gen` / `import` / `run`
+
+If `run` fails with **Appium is not installed** or **npm is not in PATH**, do **not** only generate cases — run `python uiatest.py setup` and tell the user to install Node.js LTS if npm is missing.
+
+Never skip setup on a machine that has never passed `doctor`.
 
 ## Default Stack
 
@@ -45,12 +61,15 @@ python uiatest.py gen cases/your_case.nl
 python uiatest.py run "运行P1测试用例"
 python uiatest.py inspect
 python uiatest.py clean
+python uiatest.py setup
+python uiatest.py doctor
 python uiatest.py init
 ```
 
 | Subcommand | Purpose |
 |------------|---------|
 | `init` | Bootstrap project from `scaffold/` (skill-only setup) |
+| `setup` | **One-shot env install** (pip + Allure + Appium stack; needs npm) |
 | `run` | Run by NL, `--priority`, or `--test` |
 | `import` | CSV/XLSX → `.nl` + spec + pytest |
 | `gen` | `.nl` → spec + pytest |

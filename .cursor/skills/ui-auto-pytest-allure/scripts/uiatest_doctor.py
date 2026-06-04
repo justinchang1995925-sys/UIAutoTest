@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import socket
 import sys
 from pathlib import Path
@@ -14,7 +15,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 from adb_utils import list_authorized_devices, resolve_adb  # noqa: E402
 from allure_cli import resolve_allure_command  # noqa: E402
-from appium_server import is_appium_ready  # noqa: E402
+from appium_server import _which_appium, is_appium_ready  # noqa: E402
 from inspector_session import is_keepalive_running, load_session_info  # noqa: E402
 from project_paths import resolve_project_root  # noqa: E402
 from sheet_import_sync import sheet_import_path  # noqa: E402
@@ -60,7 +61,32 @@ def _check_adb() -> list[str]:
     return issues
 
 
-def _check_appium() -> list[str]:
+def _check_node_npm() -> list[str]:
+    issues: list[str] = []
+    if not shutil.which("npm"):
+        issues.append(
+            "npm is not in PATH. Install Node.js LTS from https://nodejs.org/ "
+            "then run: python uiatest.py setup"
+        )
+    else:
+        print("  npm: available")
+    return issues
+
+
+def _check_appium_cli() -> list[str]:
+    issues: list[str] = []
+    appium_cmd = _which_appium()
+    if not appium_cmd:
+        issues.append(
+            "Appium CLI not found. Run: python uiatest.py setup "
+            "(or: npm install -g appium && appium driver install uiautomator2)"
+        )
+    else:
+        print(f"  appium: {appium_cmd}")
+    return issues
+
+
+def _check_appium_server() -> list[str]:
     issues: list[str] = []
     port_open = False
     try:
@@ -69,9 +95,14 @@ def _check_appium() -> list[str]:
     except OSError:
         port_open = False
     if not port_open:
-        issues.append("Port 4723 is not open (Appium server not listening).")
+        issues.append(
+            "Port 4723 is not open (Appium server not listening). "
+            "It will auto-start on first test run if Appium CLI is installed."
+        )
     elif not is_appium_ready():
         issues.append("Appium port is open but /status is not ready.")
+    else:
+        print("  Appium server: ready at http://127.0.0.1:4723")
     return issues
 
 
@@ -147,8 +178,10 @@ def main() -> None:
     print(f"UIAutoTest doctor — project root: {PROJECT_ROOT}\n")
     sections = [
         ("Python packages", _check_python_modules()),
+        ("Node.js / npm", _check_node_npm()),
+        ("Appium CLI", _check_appium_cli()),
         ("adb / device", _check_adb()),
-        ("Appium", _check_appium()),
+        ("Appium server", _check_appium_server()),
         ("Capabilities", _check_capabilities()),
         ("Allure CLI", _check_allure()),
         ("Scaffold sync", _check_scaffold_sync()),
